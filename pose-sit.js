@@ -1,10 +1,10 @@
-/* 앉은 자세. work: 모니터 앞에서 타닥타닥, wait: 모니터 없이 종이를 들고 대기.
+/* 앉은 자세. work: 모니터 앞에서 타닥타닥, sit: 데스크톱에서 얌전히 앉기.
    좌표는 44x25 격자(칸) 기준이다. 면만 채우고 테두리는 cats.js 가 자동으로 두른다. */
 window.CAT_POSES = window.CAT_POSES || {};
 
 function sitBody(ctx) {
-  const { R, tick, feature, working, waiting } = ctx;
-  const wag = (working || waiting) ? (tick >> 1) % 2 : 0;
+  const { R, tick, feature, working, awake } = ctx;
+  const wag = (working || awake) ? (tick >> 1) % 2 : 0;
   // 꼬리, 몸, 가슴
   R(35, 19, 2, 2, "C"); R(36, 15, 2, 5, "C"); R(36 + wag, 13, 2, 2, feature === "stripes" || feature === "mask" ? "T" : "W");
   R(22, 11, 13, 10, "C"); R(23, 20, 12, 1, "c"); R(24, 11, 8, 3, "W");
@@ -23,7 +23,7 @@ function sitBody(ctx) {
     R(29, 4, 6, 3, "c");
   }
   // 눈과 코
-  const eye = ctx.eyeKey, open = (working || waiting) && !ctx.shut;
+  const eye = ctx.eyeKey, open = (working || awake) && !ctx.shut;
   if (open) { R(24, 6, 1, 2, eye); R(31, 6, 1, 2, eye); } else { R(24, 7, 1, 1, eye); R(31, 7, 1, 1, eye); }
   R(27, 8, 2, 1, feature === "mask" ? "P" : "E");
 }
@@ -44,18 +44,8 @@ window.CAT_POSES.work = function (ctx) {
   sitMug(ctx);
 };
 
-window.CAT_POSES.wait = function (ctx) {
-  sitBody(ctx);
-  const prop = window.CAT_PROPS[ctx.cat.prop];
-  if (prop && prop.head) prop.head(ctx, "sit");
-  const flap = ctx.tick % 8 === 0 ? 1 : 0;   // 가끔 종이가 팔랑
-  ctx.R(22, 12 - flap, 10, 8, "A"); ctx.R(23, 13 - flap, 5, 1, "a"); ctx.R(23, 15, 8, 1, "a"); ctx.R(23, 17, 6, 1, "a");
-  ctx.R(21, 15, 2, 2, "T"); ctx.R(31, 15, 2, 2, "T");
-  ctx.shiftLeft = 8;   // 모니터가 없으니 가운데로
-};
-
 window.CAT_POSES.sit = function (ctx) {   // 데스크톱: 앞발을 모으고 얌전히 앉는다
-  ctx.waiting = true;
+  ctx.awake = true;   // 눈을 뜨고 꼬리를 흔든다
   sitBody(ctx);
   const prop = window.CAT_PROPS[ctx.cat.prop];
   if (prop && prop.head) prop.head(ctx, "sit");

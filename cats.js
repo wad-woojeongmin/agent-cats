@@ -1,6 +1,6 @@
 /* 고양이 한 마리의 한 프레임을 그려 SVG 문자열로 돌려준다.
    순서: 책상 -> (모니터) -> 자세(pose-*.js) -> 테두리.
-   포즈: work(일하는 중), sleep(쉬는 중), wait(고정 대기), 그리고 pose-move.js 의 움직이는 자세.
+   포즈: work(일하는 중), sleep(쉬는 중), 그리고 pose-move.js 의 움직이는 자세.
    st.bare 가 참이면(데스크톱) 일할 때 말고는 책상과 모니터를 그리지 않는다. */
 (function () {
   const GW = 44, GH = 25;
@@ -58,14 +58,13 @@
     const M = (x, y, w, h, c) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (g[yy][xx] === "C") g[yy][xx] = c; };
     const ctx = {
       cat, st, g, R, M, GW, GH, tick: st.tick, shut: st.shut,
-      working: st.pose === "work", waiting: st.pose === "wait",
-      feature: window.CAT_VARIANTS[variant].feature, eyeKey: window.CAT_VARIANTS[variant].eye || "E", shiftLeft: 0
+      working: st.pose === "work",
+      feature: window.CAT_VARIANTS[variant].feature, eyeKey: window.CAT_VARIANTS[variant].eye || "E"
     };
     const desk = !st.bare || st.pose === "work";                                       // 데스크톱(bare)에서는 일할 때만 책상을 편다
     if (desk) { R(0, 21, GW, 3, "D"); R(0, 21, GW, 1, "d"); R(0, 23, GW, 1, "e"); }      // 책상
-    if (desk && st.pose !== "wait") monitor(ctx);
+    if (desk) monitor(ctx);
     (window.CAT_POSES[st.pose] || window.CAT_POSES.sleep)(ctx);
-    if (ctx.shiftLeft && !st.bare) for (let y = 0; y < 21; y++) g[y] = g[y].slice(ctx.shiftLeft).concat(Array(ctx.shiftLeft).fill("."));
     const o = outline(g);
     let x0 = GW, y0 = GH, x1 = 0, y1 = 0;                                               // 실제 그림이 있는 칸의 경계
     o.forEach((row, y) => row.forEach((ch, x) => { if (ch !== ".") { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + 1); y1 = Math.max(y1, y + 1); } }));

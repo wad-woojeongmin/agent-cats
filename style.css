@@ -1,6 +1,6 @@
 :root{
   --bg:#fafafa; --ink:#111; --body:#374151; --muted:#6b7280; --soft:#898989; --line:#e5e7eb; --card:#fff;
-  --green:#34d399; --amber:#f59e0b; --warn:#92400e; --warnbg:#fef3c7;
+  --green:#34d399; --warn:#92400e; --warnbg:#fef3c7;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--body);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",system-ui,sans-serif}
@@ -26,9 +26,8 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.92em}
 .b-main{font-size:17px;font-weight:600;color:var(--ink);line-height:1.4}
 .b-sub{font-size:14px;color:var(--body);line-height:1.5}
 .b-meta{font-size:12px;color:var(--soft);line-height:1.5}
-.cat[data-state="working"] .b-main::before,.cat[data-state="waiting"] .b-main::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;animation:pulse 1.4s ease-in-out infinite}
+.cat[data-state="working"] .b-main::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;animation:pulse 1.4s ease-in-out infinite}
 .cat[data-state="working"] .b-main::before{background:var(--green)}
-.cat[data-state="waiting"] .b-main::before{background:var(--amber)}
 
 .zzz{position:absolute;right:5px;top:-4px;width:36px;height:40px;pointer-events:none}
 .zzz i{position:absolute;left:0;bottom:0;font-style:normal;font-weight:700;color:var(--soft);opacity:0;animation:zzz 3s ease-in infinite}

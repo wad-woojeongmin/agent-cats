@@ -101,15 +101,11 @@ struct CatEditor: View {
             }
             Picker("소품", selection: $cat.prop) {
                 ForEach(TeamStore.props, id: \.0) { Text($0.1).tag($0.0) }
+                if !TeamStore.props.contains(where: { $0.0 == cat.prop }) { Text(cat.prop).tag(cat.prop) }   // 손으로 적은 모르는 소품
             }
-            if cat.fixed {
-                Text("이 고양이는 팀.json 의 fixed 로 고정 상태를 띄워요. 찾을 말은 쓰지 않아요.")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                TextField("찾을 말 (쉼표로 구분)", text: $cat.match)
-                TextField("업무명 (상태 메시지)", text: $cat.task, prompt: Text("비우면 \"폴더이름 작업중\""))
-                Toggle("마지막 보고 문장을 읽지 않기", isOn: $cat.isPrivate)
-            }
+            TextField("찾을 말 (쉼표로 구분)", text: $cat.match)
+            TextField("업무명 (상태 메시지)", text: $cat.task, prompt: Text("비우면 \"폴더이름 작업중\""))
+            Toggle("마지막 보고 문장을 읽지 않기", isOn: $cat.isPrivate)
             Toggle("데스크톱에 보이기", isOn: Binding(get: { !cat.hidden }, set: { cat.hidden = !$0 }))
             if stages.displays.count > 1 {
                 Picker("디스플레이", selection: Binding(get: { settings.displays[key] ?? "" },

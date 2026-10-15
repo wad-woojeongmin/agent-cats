@@ -1,5 +1,5 @@
 // 팀.json 읽기/쓰기. 팀원 관리 화면이 이 저장소를 고친다.
-// 모르는 항목(fixed 등)은 그대로 두고, 사람이 직접 고치기 좋게 항목 순서와 들여쓰기를 지켜서 쓴다.
+// 모르는 항목은 그대로 두고, 사람이 직접 고치기 좋게 항목 순서와 들여쓰기를 지켜서 쓴다.
 import Cocoa
 
 struct CatEntry: Identifiable {
@@ -14,7 +14,6 @@ struct CatEntry: Identifiable {
     var task: String { get { raw["task"] as? String ?? "" } set { put("task", newValue) } }
     var isPrivate: Bool { get { raw["private"] as? Bool ?? false } set { raw["private"] = newValue ? true : nil } }
     var hidden: Bool { get { raw["hidden"] as? Bool ?? false } set { raw["hidden"] = newValue ? true : nil } }
-    var fixed: Bool { raw["fixed"] != nil }
     var match: String {
         get { (raw["match"] as? [String] ?? []).joined(separator: ", ") }
         set {
@@ -43,7 +42,7 @@ final class TeamStore: ObservableObject {
     var onSaved: (() -> Void)?
 
     static let variants = [("white", "흰 고양이"), ("tabby", "줄무늬"), ("gray", "회색"), ("tux", "턱시도"), ("siamese", "샴")]
-    static let props = [("", "컵만"), ("headphones", "헤드폰"), ("glasses", "안경"), ("postit", "포스트잇"), ("chart", "차트"), ("paper", "종이")]
+    static let props = [("", "컵만"), ("headphones", "헤드폰"), ("glasses", "안경"), ("postit", "포스트잇"), ("chart", "차트")]
 
     init(url: URL) {
         self.url = url
@@ -164,7 +163,7 @@ final class TeamStore: ObservableObject {
 
     // MARK: 순서를 지키는 JSON 쓰기
 
-    private static let catOrder = ["key", "name", "role", "variant", "prop", "task", "match", "fixed", "private", "hidden"]
+    private static let catOrder = ["key", "name", "role", "variant", "prop", "task", "match", "private", "hidden"]
 
     private static func pretty(_ v: Any, order: [String] = catOrder, indent: String) -> String {
         let inner = indent + "  "

@@ -69,7 +69,7 @@ FAIL=0
 # (1) 실제 팀.json
 [ -f 팀.json ] && run "팀.json" 팀.json
 
-# (2) 최근 세션 폴더 이름마다 고양이 하나 + 비공개/고정/빈 찾을 말/없는 말/대문자/문자열 match
+# (2) 최근 세션 폴더 이름마다 고양이 하나 + 비공개/옛 fixed(무시)/빈 찾을 말/없는 말/대문자/문자열 match
 python3 - "$T/broad.json" <<'PY'
 import importlib.util, json, os, sys
 spec = importlib.util.spec_from_file_location("collect_py", "수집.py")
@@ -78,7 +78,7 @@ names = sorted({os.path.basename((s.get("cwd") or "").rstrip("/")) for s in m.al
 cats = [{"key": f"c{i}", "name": f"고양이{i}", "match": [n], "variant": "white", "extra": {"x": [1, None]}} for i, n in enumerate(names)]
 if names:
     cats += [{"key": "priv", "match": [names[0].upper()], "private": True},
-             {"key": "fixed", "match": [names[0]], "fixed": "중"},
+             {"key": "oldfixed", "match": [names[0]], "fixed": "중"},
              {"key": "all", "match": [""]},
              {"key": "none", "match": ["이런-폴더는-없다-zz"]},
              {"key": "chars", "match": "zq"},
@@ -149,13 +149,18 @@ case(205, [user(), asst([text("끝냈어요")], stop="end_turn"), jl({"type": "a
 case(206, [user(), asst([text("끝냈어요")], stop="end_turn"), jl({"type": "user", "isMeta": 0, "message": {}})], age=600)
 case(207, [user(), asst([text("오래된 것")], stop="end_turn")], age=3 * 86400)   # 이틀 넘음 → 없음
 case(208, [user(), asst([tool("Edit", {"file_path": "/비밀/파일.txt"}), text("비밀 보고입니다. 더")])], age=30, cat={"private": True})
-case(209, [user(), asst([tool("Edit", {"file_path": "/a.txt"})])], age=30, cat={"fixed": True})
+case(209, [user(), asst([tool("Edit", {"file_path": "/a.txt"})])], age=30, cat={"fixed": True})   # 옛 fixed 는 무시하고 찾을 말로 본다
 # 일하는 중 판단: 턴을 알면 턴만 본다 (막 끝난 턴은 바로 쉼), 모르면 300초 규칙
 case(218, [user(), asst([text("방금 끝냈어요")], stop="end_turn")], age=30)               # 닫힘 + 최근 → 쉼
 case(219, [user(), asst([text("도구 쓰는 중")], stop="tool_use")], age=30)               # 열림 + 최근 → 일함
 case(220, [jl({"type": "progress"})], age=30)                                           # 모름 + 최근 → 일함
 case(221, [jl({"type": "progress"})], age=600)                                          # 모름 + 오래됨 → 쉼
 case(222, [user(isMeta=True), asst([text("곁")], isSidechain=True)], age=30)            # 메타·곁가지만 → 모름 + 최근 → 일함
+# 사용자가 끊음 (Esc): 끊은 줄이 마지막이면 턴은 닫힘 → 쉼
+case(223, [user(), asst([text("하는 중")], stop="tool_use"), user(message={"content": "[Request interrupted by user]"})], age=30)
+case(224, [user(), asst([tool("Bash", {"command": "ls"})]),
+           user(message={"content": [{"type": "text", "text": "[Request interrupted by user for tool use]"}]})], age=30)
+case(225, [user(), asst([text("끝")], stop="end_turn"), user(message={"content": [{"type": "text", "text": "다음 일"}]})], age=30)   # 보통 말 → 일함
 # 원시 U+2028/U+0085 가 든 줄 (파이썬 splitlines 가 쪼개서 못 읽는 줄), 깨진 UTF-8, CRLF
 raw = "\n".join([jl({"type": "system", "cwd": "/w/case210-x"}), user(), asst([tool("Read", {"file_path": "/ok.txt"}), text("읽을 수 있는 줄입니다")])]).encode()
 raw += b"\r\n" + asst([tool("Edit", {"file_path": "/a b.txt"})]).encode() + b"\n"
@@ -210,6 +215,16 @@ cats += [{"key": "alpha", "match": ["ALPHA"]}, {"key": "beta", "match": ["베타
 json.dump({"title": "시험", "catWidth": 150, "staleSec": None, "extra": 1, "cats": cats}, open(f"{R}/team.json", "w"), ensure_ascii=False)
 PY
 run "시험 기록" "$T/fx/team.json" "$T/fx/meta" "$T/fx/projects"
+# 끊은 턴은 쉼, 보통 말은 일함, 옛 fixed 는 무시 (두 수집기가 같아도 틀릴 수 있어 따로 본다)
+python3 - "$T/s.json" "$T/p.json" <<'PY' || FAIL=1
+import json, sys
+want = {"k223": "idle", "k224": "idle", "k225": "working", "k209": "working"}
+for f in sys.argv[1:]:
+    st = json.load(open(f, encoding="utf-8"))["status"]
+    bad = [f"{k} 기대 {v}, 받음 {st[k]['state']}" for k, v in want.items() if st[k]["state"] != v]
+    print("  끊은 턴·옛 fixed:", "통과" if not bad else "틀림 " + "; ".join(bad))
+    if bad: sys.exit(1)
+PY
 
 [ -n "${KEEP:-}" ] && cp "$T/s.json" "$KEEP"
 

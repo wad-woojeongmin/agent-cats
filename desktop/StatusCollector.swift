@@ -51,7 +51,7 @@ final class StatusCollector {
         var status: [String: Any] = [:]
         var following: [String: (id: String, cwd: String)] = [:]
         var attention: [String: (kind: String, stamp: String)] = [:]
-        for c in cats where truthy(c["match"]) && !truthy(c["fixed"]) {
+        for c in cats where truthy(c["match"]) {
             guard let key = c["key"] as? String else { throw CocoaError(.fileReadCorruptFile) }   // 파이썬도 key 가 없으면 멈춘다
             let r = build(c, sessions, logs)
             status[key] = r.status
@@ -212,9 +212,9 @@ final class StatusCollector {
                 let msg = ev["message"] as? [String: Any] ?? [:]
                 if !seen, main {
                     seen = true
-                    let open = type == "user" || msg["stop_reason"] as? String != "end_turn"
+                    let open = type == "user" ? !Self.interrupted(msg) : msg["stop_reason"] as? String != "end_turn"
                     if !done { turnOpen = open }
-                    if !open { reply = Self.stamp(ev) }
+                    if !open, type == "assistant" { reply = Self.stamp(ev) }   // 끊어서 닫힌 턴은 답이 아님
                 }
                 if main, type == "user" {
                     let parts = msg["content"] as? [Any] ?? [msg["content"] as Any]
@@ -252,6 +252,15 @@ final class StatusCollector {
             out["doing"] = tool.isEmpty ? "" : Self.phrase(tool)
         }
         return (out, s, question.map { ("question", $0) } ?? reply.map { ("reply", $0) })
+    }
+
+    /// 사용자가 끊은 줄 (Esc): "[Request interrupted by user]", "... for tool use]"
+    private static func interrupted(_ msg: [String: Any]) -> Bool {
+        let c = msg["content"]
+        let text = (c as? [Any]).map { parts in
+            parts.compactMap { ($0 as? [String: Any]).flatMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil } }.joined()
+        } ?? c as? String
+        return text?.hasPrefix("[Request interrupted by user") ?? false
     }
 
     /// 기록 한 줄을 가리키는 값: uuid, 없으면 timestamp

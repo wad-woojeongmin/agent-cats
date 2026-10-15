@@ -1,7 +1,7 @@
 /* 데스크톱에서 움직이는 자세. 오른쪽을 보는 옆모습이고, 왼쪽을 볼 때는 화면에서 뒤집는다.
    발끝은 20번 줄(앉은 자세와 같은 바닥), 몸 가운데는 28번 칸 언저리다.
    walk/run(4프레임), jump(0: 웅크림, 1: 공중), stretch, rest(쉬기), play(앞발로 톡톡), sitside(옆으로 앉기),
-   alert(놀람: 0 웅크림, 1 공중, 2 섬. 머리 위에 "!", 뛰어오르는 높이는 화면에서 준다). */
+   alert(놀람: 0 웅크림, 1 공중, 2 섬. 뛰어오르는 높이와 빨간 "!" 는 화면(desk-view)에서 준다). */
 window.CAT_POSES = window.CAT_POSES || {};
 
 (function () {
@@ -122,7 +122,6 @@ window.CAT_POSES = window.CAT_POSES || {};
   window.CAT_POSES.alert = function (ctx) {
     const { R } = ctx, f = ctx.st.frame || 0, low = f === 0 ? 2 : 0;
     ctx.wide = true;
-    window.drawBang(R, 41, 1, "!");                                                          // 느낌표
     const tail = tailUp(ctx, 18, 7 + low, 0);
     R(20, 13 + low, 14, 5, "C");
     if (f === 1) [21, 25, 28, 32].forEach((x) => leg(ctx, x, 18, 2));                        // 공중: 다리를 모은다

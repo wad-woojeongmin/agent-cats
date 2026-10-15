@@ -34,6 +34,8 @@ enum AttentionTest {
             ("곁가지 질문만", [user("u1"), asst("s1", [ask("t9")], ["isSidechain": true])], nil),
             ("uuid 없으면 timestamp", [user("u1"), jl(["type": "assistant", "timestamp": "2026-01-01T00:00:00Z",
                                                     "message": ["content": [text], "stop_reason": "end_turn"]])], "reply:2026-01-01T00:00:00Z"),
+            ("끊음 → 답 안 함", [user("u1"), asst("a1", [text]), user("u2", "[Request interrupted by user]")], nil),
+            ("질문 중 끊음", [user("u1"), asst("a1", [ask("t1")]), user("u2", [["type": "text", "text": "[Request interrupted by user for tool use]"]])], nil),
         ]
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("attention-\(getpid())").path
         defer { try? FileManager.default.removeItem(atPath: root) }

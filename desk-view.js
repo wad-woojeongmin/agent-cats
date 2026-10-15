@@ -3,7 +3,7 @@
 (function () {
   const W = window.deskWorld, B = window.deskBrain, S = window.deskSettings, G = window.CAT_GRID;
   const layer = document.getElementById("pets");      // 고양이 몸
-  const over = document.getElementById("overlay");    // 말풍선, 노란 "!" (어느 고양이보다 위)
+  const over = document.getElementById("overlay");    // 말풍선, 노란·빨간 "!" (어느 고양이보다 위)
   const staleEl = document.getElementById("stale");
   const MOVE_POSES = { walk: 1, run: 1, jump: 1, stretch: 1, rest: 1, play: 1, alert: 1 };
   let signature = "", lastRects = "", rectsAt = 0, savedAt = Date.now(), data = null, home = "";
@@ -33,7 +33,7 @@
       c.art = c.el.querySelector(".art");
       c.short = bubble("short"); c.detail = bubble("detail");
       c.bang = document.createElement("div");                            // 클릭은 통과 (hit rect 에도 안 넣는다)
-      c.bang.className = "bang"; c.bang.hidden = true; c.bang.innerHTML = window.bangSVG("?");
+      c.bang.className = "bang"; c.bang.hidden = true;
       over.appendChild(c.bang);
       c.drawKey = ""; c.bbox = [0, 0, G.w, G.h];
       c.nextBubble = Date.now() + 4000 + i * 2500;
@@ -125,14 +125,28 @@
     el.style.setProperty("--tail", Math.round(Math.min(Math.max(cx - left, 16), bw - 16)) + "px");
   }
 
-  /* 노란 "!": 그림 경계의 위 오른쪽. 놀란 "!" 가 떠 있거나 들고 있으면 숨긴다. 말풍선이 비켜 서도록 경계를 넓혀 돌려준다 */
+  /* 머리 위 "!" 하나: 놀랐으면 빨강("!"), 사용자 차례면 노랑("?"), 들고 있으면 숨긴다.
+     자리는 자세마다 고정: 기준 프레임 경계의 위 가운데, 한 칸 위를 발(c.x, c.y)에서 잰다. 꼬리·다리·점프(lift)를 따라가지 않는다.
+     #overlay 라 고양이 위에 그려져서 뛰어오른 머리와 겹쳐도 가려지지 않는다. 말풍선이 비켜 서도록 box 를 위로 넓혀 돌려준다 */
+  const BANG_FRAME = { alert: 2 };                          // 자세별 기준 프레임 (없으면 0). 놀람은 선 프레임
+  const bangSvg = {}, bangAt = new WeakMap();              // bangAt: cfg → {자세: [가운데 x, 위 y] 칸}. 무늬·소품마다 경계가 달라서 cfg 별로 둔다
+  function bangCell(c) {
+    let m = bangAt.get(c.cfg);
+    if (!m) bangAt.set(c.cfg, m = {});
+    if (!m[c.pose]) {
+      const [x0, y0, x1] = window.catFrame(c.cfg, { pose: c.pose, tick: 0, frame: BANG_FRAME[c.pose] || 0, bare: true }).bbox;
+      m[c.pose] = [(x0 + x1) / 2, y0 - window.BANG_GRID.h - 1];
+    }
+    return m[c.pose];
+  }
   function placeBang(c) {
-    const el = c.bang, k = cell();
-    el.hidden = !attention[c.key] || c.pose === "alert" || c.held;
-    if (el.hidden) return c.box;
-    const w = window.BANG_GRID.w * k, h = window.BANG_GRID.h * k;
-    const left = Math.min(Math.max(c.box[2] - w - k, 0), W.w - w);
-    const top = Math.min(Math.max(c.box[1] - h, 0), W.h - h);
+    const el = c.bang, key = c.held ? "" : c.pose === "alert" ? "!" : attention[c.key] ? "?" : "";
+    el.hidden = !key;
+    if (!key) return c.box;
+    if (el.dataset.key !== key) { el.dataset.key = key; el.innerHTML = bangSvg[key] || (bangSvg[key] = window.bangSVG(key)); }
+    const k = cell(), w = window.BANG_GRID.w * k, h = window.BANG_GRID.h * k, [cx, gy] = bangCell(c);
+    const gx = (flipOf(c) ? 2 * G.footX - cx : cx) - window.BANG_GRID.w / 2;   // 뒤집히면 가운데도 뒤집힌 칸에서
+    const left = Math.min(Math.max(c.x + (gx - G.footX) * k, 0), W.w - w), top = Math.min(Math.max(c.y + (gy - G.footY) * k, 0), W.h - h);
     el.style.width = w + "px";
     el.style.transform = "translate(" + Math.round(left) + "px," + Math.round(top) + "px)";
     return [c.box[0], Math.min(c.box[1], top), c.box[2], c.box[3]];

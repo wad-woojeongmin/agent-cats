@@ -34,13 +34,17 @@ final class ContextMenu: NSObject {
             send.submenu = sub
             menu.addItem(send)
         }
-        if menuSession != nil {                                 // 세션을 못 찾았거나 고정 상태인 고양이는 없다
+        if let s = menuSession {                                // 세션을 못 찾은 고양이는 없다
             let busy = feed?.working.contains(key) == true      // 일하는 중에 또 열면 두 프로세스가 같은 세션에 쓴다
+            var isDir: ObjCBool = false
+            let gone = !FileManager.default.fileExists(atPath: s.cwd, isDirectory: &isDir) || !isDir.boolValue   // 폴더가 지워짐
             menu.addItem(.separator())
-            let open = item(busy ? "작업 열기 (일하는 중)" : "작업 열기", "terminal", #selector(openWork))
-            open.isEnabled = !busy
+            let open = item(gone ? "작업 열기 (폴더 없음)" : busy ? "작업 열기 (일하는 중)" : "작업 열기", "terminal", #selector(openWork))
+            open.isEnabled = !busy && !gone
             menu.addItem(open)
-            menu.addItem(item("작업 폴더 열기", "folder", #selector(openFolder)))
+            let folder = item(gone ? "작업 폴더 열기 (폴더 없음)" : "작업 폴더 열기", "folder", #selector(openFolder))
+            folder.isEnabled = !gone
+            menu.addItem(folder)
         }
         menu.addItem(.separator())
         menu.addItem(item("이 고양이 숨기기", "eye.slash", #selector(hideCat)))

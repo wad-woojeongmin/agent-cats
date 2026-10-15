@@ -133,7 +133,6 @@
   function choose(c, now) {
     const st = c.line.state;
     if (st === "working") return [Math.random() < .12 && on("stretch") ? stay("stretch", 3.2) : stay("work", rand(40, 90))];
-    if (st === "waiting") return [stay("wait", 60)];
     if (c.pinned) {
       if (st === "missing") return [stay("sleep", 120)];
       return [stay(pick(["sit", "rest", "sleep", "sleep"]), rand(15, 40))];

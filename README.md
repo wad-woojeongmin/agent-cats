@@ -33,9 +33,8 @@ macOS 14 이상에서 동작합니다. Apple Silicon, Intel 모두 됩니다.
 | `match` | 찾을 말 목록. 세션 제목이나 작업 폴더 경로에 하나라도 들어 있으면 이 고양이 담당입니다 |
 | `name`, `role` | 이름과 직군 |
 | `variant` | 품종: `white`, `tabby`, `gray`, `tux`, `siamese` |
-| `prop` | 소품: `headphones`, `glasses`, `postit`, `chart`, `paper` |
+| `prop` | 소품: `headphones`, `glasses`, `postit`, `chart` |
 | `task` | (선택) 일하는 중에 말풍선에 띄울 업무명 |
-| `fixed` | (선택) 세션과 상관없이 띄울 고정 상태. 예: `{"main": "배포 대기중"}` |
 | `private` | (선택) true 면 말풍선에 보고 문장과 폴더·파일 이름을 싣지 않습니다 |
 
 ## Claude Code 에서 고양이 추가

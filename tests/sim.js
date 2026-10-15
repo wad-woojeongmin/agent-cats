@@ -14,9 +14,10 @@ const POSES = new Set(Object.keys(window.CAT_POSES));
 const fails = [];
 const fail = (msg) => { if (fails.length < 20) fails.push(msg); };
 if (!POSES.has("alert")) fail("놀람 자세(alert)가 없다");
-["white", "tabby", "gray", "tux", "siamese"].forEach((variant) => [0, 1, 2].forEach((frame) => {   // 느낌표까지 그림 경계에 든다
-  const { bbox } = window.catFrame({ variant, prop: "headphones" }, { pose: "alert", frame, tick: 0, bare: true });
-  if (bbox[1] > 0 || bbox[3] > 25 || bbox[2] > 44 || bbox[0] < 12) fail("놀람 " + variant + " " + frame + ": 그림 경계 " + bbox);
+["white", "tabby", "gray", "tux", "siamese"].forEach((variant) => [0, 1, 2].forEach((frame) => {   // 느낌표는 화면이 따로 띄운다
+  const { grid, bbox } = window.catFrame({ variant, prop: "headphones" }, { pose: "alert", frame, tick: 0, bare: true });
+  if (grid.some((row) => row.includes("!"))) fail("놀람 " + variant + " " + frame + ": 그림 안에 느낌표가 남았다");
+  if (!(bbox[0] < bbox[2] && bbox[1] < bbox[3]) || bbox[0] < 0 || bbox[1] < 0 || bbox[2] > 44 || bbox[3] > 25) fail("놀람 " + variant + " " + frame + ": 그림 경계 " + bbox);
 }));
 
 const win = { id: 1, x: 600, y: 300, w: 560, h: 380 };
@@ -25,11 +26,11 @@ W.update({ menubar: 24, windows: [Object.assign({}, win)], icons: [{ x: 40, y: 8
 const now0 = 1e12;
 const cfgs = [
   { key: "a", variant: "white" }, { key: "b", variant: "tabby" }, { key: "c", variant: "white" },
-  { key: "d", variant: "white" }, { key: "e", variant: "white", fixed: { main: "기다리는 중" } }
+  { key: "d", variant: "white" }, { key: "e", variant: "white" }
 ];
 const status = {
   a: { state: "idle", last: now0 }, b: { state: "idle", last: now0 },
-  c: { state: "working", last: now0, doing: "편집" }, d: { state: "missing" }
+  c: { state: "working", last: now0, doing: "편집" }, d: { state: "missing" }, e: { state: "idle", last: now0 }
 };
 B.cats = cfgs.map((cfg) => B.make(cfg));
 B.cats.forEach((c) => B.setLine(c, window.catLine(c.cfg, status[c.key])));
@@ -127,10 +128,10 @@ jumpOntoClosing(true);
     const [, o, q] = pair({}, { state: "missing" });
     if (!q || !q.some((s) => s.love) || !o.queue.some((s) => s.love)) fail("서로 놀기: 세션 없는 고양이를 짝으로 못 골랐다");
   }
-  [[{}, { state: "working", last: t, doing: "편집" }], [{ fixed: { main: "기다리는 중" } }, null]].forEach(([cfg, st]) => {
-    const [, o, q] = pair(cfg, st);
+  {
+    const [, o, q] = pair({}, { state: "working", last: t, doing: "편집" });
     if (q) fail("서로 놀기: " + o.line.state + " 고양이를 짝으로 데려갔다");
-  });
+  }
 
   /* 먼저 온 고양이는 짝이 올 때까지 기다렸다가 함께 놀기 시작하고 함께 끝낸다. 짝이 안 오면 15초 안에 접고 혼자 놀지 않는다 */
   const meet = (key, spoil) => {
@@ -205,10 +206,8 @@ jumpOntoClosing(true);
     if (!chasing(a)) fail("흔들기: 놀란 뒤 쫓아오지 않았다"); }
   { const a = mk("w3", { state: "missing" }); wait(1.6); B.cats = [a]; shake(a);
     if (!caught(a)) fail("흔들기: 세션 없는 고양이가 쫓아오지 않았다"); }
-  [[{}, { state: "working", last: t, doing: "편집" }], [{ fixed: { main: "기다리는 중" } }, null]].forEach(([cfg, st]) => {
-    const a = mk("w4", st, cfg); wait(1.6); B.cats = [a]; shake(a);
-    if (caught(a)) fail("흔들기: " + a.line.state + " 고양이가 쫓아왔다");
-  });
+  { const a = mk("w4", { state: "working", last: t, doing: "편집" }); wait(1.6); B.cats = [a]; shake(a);
+    if (caught(a)) fail("흔들기: " + a.line.state + " 고양이가 쫓아왔다"); }
   { const a = mk("w11", idle()); wait(1.6); B.cats = [a]; zigzag(a, 4);   // 15Hz 로 1초 안에 4번 바꾸면 아직, 5번이면 반응
     if (caught(a)) fail("흔들기: 방향을 4번만 바꿨는데 쫓아왔다");
     wait(1.6); zigzag(a, 5);

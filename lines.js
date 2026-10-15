@@ -23,10 +23,6 @@
 
   window.catLine = function (cfg, s, dots) {
     dots = dots || "";
-    if (cfg.fixed) {                                            // 세션과 무관한 고정 상태
-      return { state: "waiting", pose: "wait", short: cfg.fixed.main,
-               main: cfg.fixed.main + dots, sub: cfg.fixed.sub || "", meta: label(cfg) };
-    }
     if (!s || s.state === "missing") {                          // 맡은 세션이 아직 없다
       return { state: "missing", pose: "sleep", short: "아직 일을 시작 안 했어요",
                main: "아직 일을 시작 안 했어요", sub: "찾을 말이 들어간 폴더나 세션을 열면 여기 나타나요.", meta: label(cfg) };

@@ -37,6 +37,5 @@ window.CAT_PROPS = {
         ctx.R(3 + i * 2, 15 - h, 1, h, i % 2 ? "t" : "g");
       });
     }
-  },
-  paper: {}   // 대기 자세에서 종이를 든다 (pose-sit.js 가 처리)
+  }
 };

@@ -171,6 +171,14 @@ def tail_events(path):
             continue
 
 
+def interrupted(msg):
+    # 사용자가 끊은 줄 (Esc): "[Request interrupted by user]", "... for tool use]"
+    c = msg.get("content")
+    if isinstance(c, list):
+        c = "".join(p["text"] for p in c if isinstance(p, dict) and p.get("type") == "text" and isinstance(p.get("text"), str))
+    return isinstance(c, str) and c.startswith("[Request interrupted by user")
+
+
 def build(cat, sessions):
     now = int(time.time() * 1000)
     found = find_sessions(sessions, cat.get("match") or [])
@@ -181,9 +189,9 @@ def build(cat, sessions):
     tool, tinp, said, turn_open = "", {}, "", None
     if log:
         for ev in tail_events(log):
-            if turn_open is None and ev.get("type") in ("user", "assistant") and not ev.get("isMeta") and not ev.get("isSidechain"):
-                turn_open = ev["type"] == "user" or (ev.get("message") or {}).get("stop_reason") != "end_turn"
             msg = ev.get("message") or {}
+            if turn_open is None and ev.get("type") in ("user", "assistant") and not ev.get("isMeta") and not ev.get("isSidechain"):
+                turn_open = not interrupted(msg) if ev["type"] == "user" else msg.get("stop_reason") != "end_turn"
             if ev.get("type") != "assistant" or not isinstance(msg.get("content"), list):
                 continue
             for part in msg["content"]:
@@ -210,7 +218,7 @@ def build(cat, sessions):
 
 def write(cfg):
     sessions = all_sessions()
-    status = {c["key"]: build(c, sessions) for c in cfg["cats"] if c.get("match") and not c.get("fixed")}
+    status = {c["key"]: build(c, sessions) for c in cfg["cats"] if c.get("match")}
     public = [{k: v for k, v in c.items() if k not in ("match",)} for c in cfg["cats"]]
     data = {"title": cfg.get("title", ""), "catWidth": cfg.get("catWidth", 166), "columns": cfg.get("columns", 3),
             "staleSec": cfg.get("staleSec", 60), "updated": int(time.time() * 1000), "cats": public, "status": status}
