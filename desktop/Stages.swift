@@ -97,12 +97,25 @@ final class Stages: ObservableObject {
     /// 고양이를 디스플레이에 나눈다 (규칙은 DisplayAssign.swift). 바뀌었으면 모든 무대에 알린다
     func reassign(force: Bool = false) {
         guard !displays.isEmpty else { return }
+        prune()
         let r = DisplayAssign.run(cats: store.cats.filter { !$0.hidden }.map(\.key),
                                   chosen: settings.displays, displays: displays.map(\.id))
         if !r.placed.isEmpty { settings.displays.merge(r.placed) { $1 } }   // 정한 자리는 기억해서 다시 섞지 않는다
         guard force || r.assign != assign else { return }
         assign = r.assign
         pushSettings()
+    }
+
+    /// 지운 고양이의 디스플레이·위치를 버린다. key 는 cat1, cat2… 로 다시 쓰여 새 고양이가 물려받기 때문.
+    /// 숨긴 고양이는 남기고, 팀.json 을 못 읽었으면 목록이 비어 있을 수 있어 건드리지 않는다
+    private func prune() {
+        guard store.loaded else { return }
+        let keys = Set(store.cats.map(\.key))
+        let d = settings.displays.filter { keys.contains($0.key) }
+        if d.count != settings.displays.count { settings.displays = d }
+        let saved = settings.savedCats
+        let s = saved.filter { keys.contains($0.key) }
+        if s.count != saved.count { settings.savedCats = s }
     }
 
     /// 사용자가 고른 디스플레이. nil 이면 지금 고양이가 가장 적은 디스플레이로 옮긴다

@@ -1,18 +1,30 @@
 // 고양이 팀 데스크톱 앱의 시작점.
 // 메뉴 막대에만 나타나는 앱(.accessory)으로 뜨고, 디스플레이마다 화면 전체를 덮는 투명 패널에 desktop.html 을 띄운다.
-// 수집기(수집.py --loop)도 함께 켜고, 앱을 끌 때 같이 끈다.
+// 세션 상태는 앱 안에서 모은다 (StatusFeed).
 import Cocoa
 import Combine
 
 enum Paths {
-    /// 프로젝트 폴더: 앱 번들이 놓인 폴더. 시험할 때는 CATTEAM_DIR 로 바꿀 수 있다.
-    static let project: URL = {
-        if let dir = ProcessInfo.processInfo.environment["CATTEAM_DIR"] { return URL(fileURLWithPath: dir) }
-        return Bundle.main.bundleURL.deletingLastPathComponent()
-    }()
-    static var team: URL { project.appendingPathComponent("팀.json") }
-    static var example: URL { project.appendingPathComponent("팀.example.json") }
-    static var page: URL { project.appendingPathComponent("desktop.html") }
+    /// 웹 파일: 앱 번들 안 Resources/web (build.sh 가 복사한다)
+    static let web = Bundle.main.resourceURL!.appendingPathComponent("web")
+    static var page: URL { web.appendingPathComponent("desktop.html") }
+    static var example: URL { Bundle.main.resourceURL!.appendingPathComponent("팀.example.json") }
+    /// 설정 폴더: ~/Library/Application Support/고양이팀
+    static let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("고양이팀")
+    static var team: URL { data.appendingPathComponent("팀.json") }
+    /// cat-add 스킬이 고양이 추가 요청을 넣는 폴더
+    static var inbox: URL { data.appendingPathComponent("inbox") }
+    /// 앱 번들이 놓인 폴더의 팀.json (저장소에서 빌드해 쓰던 것)
+    static var oldTeam: URL { Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("팀.json") }
+
+    /// 팀.json 이 없으면 만든다: 예전 팀.json 이 있으면 그것을, 없으면 예시를 복사한다. 있는 파일은 덮어쓰지 않는다
+    static func prepareTeam() {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: data, withIntermediateDirectories: true)
+        guard !fm.fileExists(atPath: team.path) else { return }
+        try? fm.copyItem(at: fm.fileExists(atPath: oldTeam.path) ? oldTeam : example, to: team)
+    }
 }
 
 @main
@@ -26,38 +38,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     let settings = PetSettings.shared
-    let collector = Collector()
     var store: TeamStore!
     var stages: Stages!
+    var feed: StatusFeed!
     var watcher: WorldWatcher!
+    var inbox: Inbox!
     var statusMenu: StatusMenu!
     var bag = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ note: Notification) {
         guard FileManager.default.fileExists(atPath: Paths.page.path) else {
             let alert = NSAlert()
-            alert.messageText = "고양이 팀 폴더를 찾지 못했어요"
-            alert.informativeText = "고양이팀.app 은 desktop.html 과 팀.json 이 있는 폴더 안에 두어야 해요.\n지금 위치: \(Paths.project.path)"
+            alert.messageText = "앱 파일이 빠져 있어요"
+            alert.informativeText = "고양이팀.app 을 다시 내려받아 주세요."
             alert.runModal()
             NSApp.terminate(nil)
             return
         }
-        if !FileManager.default.fileExists(atPath: Paths.team.path) {      // 처음 실행이면 예시를 복사해 팀.json 을 만든다
-            try? FileManager.default.copyItem(at: Paths.example, to: Paths.team)
-        }
+        Paths.prepareTeam()
         store = TeamStore(url: Paths.team)
-        collector.start()
         stages = Stages(store: store, settings: settings)
+        feed = StatusFeed(teamURL: Paths.team, stages: stages)
         watcher = WorldWatcher(hub: stages, settings: settings)
-        statusMenu = StatusMenu(store: store, settings: settings, collector: collector, stages: stages)
+        stages.onStageReady = { [weak self] stage in self?.watcher.sendAll(stage); self?.feed.refresh() }   // 새 화면도 바로 세상 정보와 상태를 받는다
+        statusMenu = StatusMenu(store: store, settings: settings, feed: feed, stages: stages)
         stages.onOpenTeam = { [weak self] in self?.statusMenu.open(.team) }
-        store.onSaved = { [weak self] in
-            self?.collector.runOnce { self?.stages.call("desk.poll") }      // 팀.json 을 고치면 바로 다시 수집해 반영
+        store.onSaved = { [weak self] in self?.feed.refresh() }               // 팀.json 을 고치면 바로 다시 수집해 반영
+        stages.menu.feed = feed
+        inbox = Inbox(dir: Paths.inbox) { [weak self] folder, name, role in   // 새 고양이는 나타날 때 한 번 인사한다
+            guard let self, let r = self.store.adopt(folder: folder, name: name, role: role) else { return }
+            self.stages.call("desk.greet", r.key, r.isNew ? "새로 왔어요!" : "이미 있어요!")
         }
 
         watchSettings()
         stages.syncScreens()                                                   // 디스플레이마다 패널을 띄운다 (투명도·켜짐도 여기서)
         watcher.start()
+        feed.start()
+        inbox.start()
     }
 
     /// 설정이 바뀌면 필요한 만큼만 반영한다. 처음 값은 syncScreens 와 "ready" 때 넘어간다
@@ -86,9 +103,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .debounce(for: wait, scheduler: RunLoop.main)
             .sink { [weak self] in self?.stages.reassign(force: true) }
             .store(in: &bag)
-    }
-
-    func applicationWillTerminate(_ note: Notification) {
-        collector.stop()
     }
 }

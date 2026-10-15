@@ -4,3 +4,4 @@ status.tmp
 팀.json
 *.tmp
 고양이팀.app/
+dist/

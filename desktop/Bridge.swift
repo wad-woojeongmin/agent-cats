@@ -1,6 +1,6 @@
 // 화면(JS)과 앱 사이의 말 전달. 디스플레이(무대)마다 하나씩 있다.
 // JS → 앱: window.webkit.messageHandlers.cat.postMessage({type, ...})
-// 앱 → JS: desk.settings / desk.world / desk.pin / desk.unpinAll / desk.poll
+// 앱 → JS: desk.settings / desk.world / desk.pin / desk.unpinAll / desk.status / desk.greet
 import Cocoa
 import WebKit
 

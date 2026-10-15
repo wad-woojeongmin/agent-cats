@@ -27,7 +27,7 @@ struct CatEntry: Identifiable {
     private mutating func put(_ k: String, _ v: String) { raw[k] = v.isEmpty ? nil : v }
 }
 
-struct CatLine {
+struct CatLine: Equatable {
     var short: String
     var state: String
 }
@@ -39,7 +39,7 @@ final class TeamStore: ObservableObject {
     @Published var lines: [String: CatLine] = [:]
     @Published var error: String?
     private var root: [String: Any] = [:]
-    private var loaded = false
+    private(set) var loaded = false
     var onSaved: (() -> Void)?
 
     static let variants = [("white", "흰 고양이"), ("tabby", "줄무늬"), ("gray", "회색"), ("tux", "턱시도"), ("siamese", "샴")]
@@ -99,12 +99,23 @@ final class TeamStore: ObservableObject {
         save()
     }
 
-    /// 새 고양이. key 는 겹치지 않게 cat1, cat2 ... 로 붙인다
-    func add() -> CatEntry {
+    /// 새 고양이
+    func add() -> CatEntry { insert(name: "새 고양이", role: "", match: ["찾을-말"]) }
+
+    /// cat-add 스킬이 보낸 작업 폴더를 맡는 고양이를 더한다. 그 폴더를 이미 찾는 고양이가 있으면 더하지 않고 그 고양이를 돌려준다
+    func adopt(folder: String, name: String, role: String) -> (key: String, isNew: Bool)? {
+        guard loaded else { return nil }                             // 깨진 팀.json 이면 저장도 안 되니 더하지 않는다
+        if let old = cats.first(where: { ($0.raw["match"] as? [String] ?? []).contains(folder) }) { return (old.key, false) }
+        let cat = insert(name: name.isEmpty ? (folder as NSString).lastPathComponent : name, role: role, match: [folder])
+        return (cat.key, true)
+    }
+
+    /// key 는 겹치지 않게 cat1, cat2 ... 로 붙인다
+    private func insert(name: String, role: String, match: [String]) -> CatEntry {
         var n = cats.count + 1
         while cats.contains(where: { $0.key == "cat\(n)" }) { n += 1 }
         let variant = TeamStore.variants[n % TeamStore.variants.count].0
-        let cat = CatEntry(raw: ["key": "cat\(n)", "name": "새 고양이", "role": "", "variant": variant, "match": ["찾을-말"]])
+        let cat = CatEntry(raw: ["key": "cat\(n)", "name": name, "role": role, "variant": variant, "match": match])
         cats.append(cat)
         save()
         return cat
@@ -142,7 +153,7 @@ final class TeamStore: ObservableObject {
             guard let d = v as? [String: Any] else { continue }
             out[key] = CatLine(short: d["short"] as? String ?? "", state: d["state"] as? String ?? "")
         }
-        lines = out
+        if out != lines { lines = out }                                      // 같으면 안 건드려 팝오버가 다시 그려지지 않게
     }
 
     private static func color(_ hex: String) -> NSColor {

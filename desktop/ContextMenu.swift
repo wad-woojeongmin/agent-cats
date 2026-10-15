@@ -3,8 +3,10 @@ import Cocoa
 
 final class ContextMenu: NSObject {
     unowned let stages: Stages
+    weak var feed: StatusFeed?                                  // 고양이가 따라가는 세션 ("작업 열기")
     private var menuKey = ""
     private weak var menuStage: Bridge?
+    private var menuSession: (id: String, cwd: String)?
 
     init(stages: Stages) {
         self.stages = stages
@@ -13,7 +15,9 @@ final class ContextMenu: NSObject {
     func show(from bridge: Bridge, key: String, name: String, pinned: Bool) {
         menuKey = key
         menuStage = bridge
+        menuSession = feed?.sessions[key]
         let menu = NSMenu()
+        menu.autoenablesItems = false
         let title = NSMenuItem(title: name, action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
@@ -29,6 +33,14 @@ final class ContextMenu: NSObject {
             }
             send.submenu = sub
             menu.addItem(send)
+        }
+        if menuSession != nil {                                 // 세션을 못 찾았거나 고정 상태인 고양이는 없다
+            let busy = feed?.working.contains(key) == true      // 일하는 중에 또 열면 두 프로세스가 같은 세션에 쓴다
+            menu.addItem(.separator())
+            let open = item(busy ? "작업 열기 (일하는 중)" : "작업 열기", "terminal", #selector(openWork))
+            open.isEnabled = !busy
+            menu.addItem(open)
+            menu.addItem(item("작업 폴더 열기", "folder", #selector(openFolder)))
         }
         menu.addItem(.separator())
         menu.addItem(item("이 고양이 숨기기", "eye.slash", #selector(hideCat)))
@@ -50,4 +62,25 @@ final class ContextMenu: NSObject {
     @objc private func sendTo(_ sender: NSMenuItem) { stages.choose(menuKey, display: sender.representedObject as? String) }
     @objc private func hideCat() { stages.store.setHidden(menuKey, true) }
     @objc private func openTeam() { stages.onOpenTeam?() }
+
+    /// 터미널에서 세션을 이어 연다: open/<key>.command 를 (매번 덮어) 쓰고 연다. 자동화 권한이 없어도 된다
+    @objc private func openWork() {
+        guard let s = menuSession, let text = StatusCollector.resumeScript(cwd: s.cwd, id: s.id) else { return NSSound.beep() }
+        let name = String(menuKey.unicodeScalars.filter { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_") })
+        let dir = Paths.data.appendingPathComponent("open")
+        let url = dir.appendingPathComponent((name.isEmpty ? "cat" : name) + ".command")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            NSWorkspace.shared.open(url)
+        } catch {
+            NSSound.beep()
+        }
+    }
+
+    @objc private func openFolder() {
+        guard let s = menuSession else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: s.cwd, isDirectory: true))
+    }
 }

@@ -6,6 +6,7 @@
   const staleEl = document.getElementById("stale");
   const MOVE_POSES = { walk: 1, run: 1, jump: 1, stretch: 1, rest: 1, play: 1 };
   let signature = "", lastRects = "", rectsAt = 0, savedAt = Date.now(), data = null, home = "";
+  const greets = {};   // key → {text, until}: 앱이 보낸 인사. 그 고양이가 이 화면에 있거나 생기면 한 번 띄운다
 
   const post = (msg) => { if (W.native) window.webkit.messageHandlers.cat.postMessage(msg); };
   const cell = () => S.size / G.w;
@@ -52,7 +53,7 @@
     if (!data) return;
     const sig = JSON.stringify([data.cats, data.cats.filter(mine).map((c) => c.key)]);
     if (sig !== signature) { signature = sig; build(data); }
-    staleEl.hidden = S.main === false || Date.now() - data.updated < (data.staleSec || 60) * 1000;   // 경고는 주 화면에만
+    staleEl.hidden = W.native || S.main === false || Date.now() - data.updated < (data.staleSec || 60) * 1000;   // 경고는 브라우저 주 화면에만 (앱은 직접 수집하고 오류는 메뉴에)
     const lines = {};
     B.cats.forEach((c) => {
       const line = window.catLine(c.cfg, (data.status || {})[c.key]);
@@ -61,6 +62,19 @@
       if (!c.detail.hidden) fillDetail(c);
     });
     post({ type: "lines", items: lines });
+    sayGreets(Date.now());
+  }
+
+  function sayGreets(now) {
+    B.cats.forEach((c) => {
+      const g = greets[c.key];
+      if (!g) return;
+      delete greets[c.key];
+      c.detail.hidden = true;
+      showShort(c, now, g.text);
+      c.nextBubble = Math.max(c.nextBubble, now + 4000);
+    });
+    for (const k in greets) if (now > greets[k].until) delete greets[k];   // 다른 화면에 사는 고양이 것
   }
 
   const poll = () => window.catPoll(apply);
@@ -72,9 +86,9 @@
     c.detail.querySelector(".b-sub").textContent = line.sub;
     c.detail.querySelector(".b-meta").textContent = line.meta;
   }
-  function showShort(c, now) {
+  function showShort(c, now, text) {
     if (!c.detail.hidden) return;
-    c.short.querySelector(".b-main").textContent = c.line.short + (c.line.state === "working" ? " .." : "");
+    c.short.querySelector(".b-main").textContent = text || c.line.short + (c.line.state === "working" ? " .." : "");
     c.short.hidden = false; c.shortUntil = now + 4000;
   }
   function showDetail(c) {
@@ -196,7 +210,8 @@
     cancelDrag() { release(false); },
     pin(key, v) { const c = B.cats.find((x) => x.key === key); if (c) { B.setPinned(c, v); save(); } },
     unpinAll() { B.cats.forEach((c) => B.setPinned(c, false)); save(); },
-    poll
+    status(o) { window.CATTEAM = o; apply(); },                         // 앱이 모은 상태 (10초마다)
+    greet(key, text) { greets[key] = { text, until: Date.now() + 30000 }; sayGreets(Date.now()); }   // 새로 온 고양이 인사
   };
 
   /* ---------- 루프 ---------- */
@@ -234,8 +249,7 @@
     const size = Number(new URLSearchParams(location.search).get("size"));   // ?demo&size=130: 고양이 크기 (48~200)
     if (size >= 48 && size <= 200) window.desk.settings({ size });
   }
-  setInterval(poll, 15000);
-  poll();
+  if (!W.native) { setInterval(poll, 15000); poll(); }                   // 브라우저에서는 status.js 를 읽는다
   requestAnimationFrame(frame);
   post({ type: "ready" });
 })();

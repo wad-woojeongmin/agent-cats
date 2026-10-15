@@ -43,7 +43,7 @@ final class PetPanel: NSPanel {
     }
 
     func load() {
-        web.loadFileURL(Paths.page, allowingReadAccessTo: Paths.project)
+        web.loadFileURL(Paths.page, allowingReadAccessTo: Paths.web)
     }
 
     /// 화면 좌표(왼쪽 아래 원점)의 점을 패널 왼쪽 위 기준 px 로

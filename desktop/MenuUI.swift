@@ -17,7 +17,7 @@ final class StatusMenu: NSObject {
     let router = Router()
     let store: TeamStore
 
-    init(store: TeamStore, settings: PetSettings, collector: Collector, stages: Stages) {
+    init(store: TeamStore, settings: PetSettings, feed: StatusFeed, stages: Stages) {
         self.store = store
         super.init()
         if let button = item.button {
@@ -30,7 +30,7 @@ final class StatusMenu: NSObject {
             .environmentObject(router)
             .environmentObject(store)
             .environmentObject(settings)
-            .environmentObject(collector)
+            .environmentObject(feed)
             .environmentObject(stages)
         popover.contentViewController = NSHostingController(rootView: root)
         popover.contentSize = NSSize(width: 380, height: 470)

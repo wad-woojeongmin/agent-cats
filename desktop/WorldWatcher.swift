@@ -20,7 +20,6 @@ final class WorldWatcher {
     init(hub: Stages, settings: PetSettings) {
         self.hub = hub
         self.settings = settings
-        hub.onStageReady = { [weak self] stage in self?.sendAll(stage) }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                object: nil, queue: .main) { [weak self] _ in
             self?.hub.stages.forEach { self?.sendAll($0) }
