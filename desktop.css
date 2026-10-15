@@ -1,0 +1,47 @@
+/* 데스크톱 화면. 배경은 투명하고, 고양이와 말풍선만 그린다. */
+:root{--ink:#1f2937;--body:#374151;--soft:#6b7280;--line:rgba(0,0,0,.08);--card:rgba(255,255,255,.94);--warn:#92400e;--warnbg:#fef3c7}
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;-webkit-user-select:none;user-select:none;cursor:default}
+body{font:13px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;color:var(--body)}
+body[hidden]{display:none}
+body.demo{background:linear-gradient(160deg,#8aa2c8,#d8b4a0 60%,#5a6b84)}
+
+#pets{position:fixed;inset:0;pointer-events:none}
+.pet{position:absolute;left:0;top:0;pointer-events:auto;will-change:transform}
+.pet .art svg{display:block;width:100%;height:auto;image-rendering:pixelated;filter:drop-shadow(0 2px 2px rgba(0,0,0,.18))}
+.pet.held{cursor:grabbing}
+.pet.held .art{filter:drop-shadow(0 8px 6px rgba(0,0,0,.25))}
+
+.bubble{position:absolute;left:0;top:0;pointer-events:none;max-width:280px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:7px 12px;box-shadow:0 4px 14px rgba(0,0,0,.14);display:flex;flex-direction:column;gap:1px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.bubble[hidden]{display:none}
+.bubble::after{content:"";position:absolute;left:calc(var(--tail,50%) - 6px);bottom:-6px;width:11px;height:11px;background:var(--card);border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg)}
+.bubble.below::after{bottom:auto;top:-6px;transform:rotate(225deg)}
+.bubble.short{white-space:nowrap}
+.bubble.short .b-main{font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.bubble.detail{padding:10px 14px;gap:3px;width:max-content}
+.bubble.detail .b-main{font-size:14px;font-weight:600;color:var(--ink)}
+.bubble.detail .b-sub{color:var(--body);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.bubble.detail .b-meta{font-size:11px;color:var(--soft)}
+.bubble.detail .b-sub:empty{display:none}
+
+.zzz{position:absolute;top:-6px;width:30px;height:36px;pointer-events:none;display:none}
+.pet[data-pose="sleep"] .zzz{display:block}
+.zzz i{position:absolute;left:0;bottom:0;font-style:normal;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);opacity:0;animation:zzz 3s ease-in infinite}
+.zzz i:nth-child(1){font-size:10px}
+.zzz i:nth-child(2){font-size:12px;animation-delay:1s}
+.zzz i:nth-child(3){font-size:15px;animation-delay:2s}
+.hearts{position:absolute;left:45%;top:-8px;pointer-events:none;display:none}
+.pet.love .hearts{display:block}
+.hearts i{position:absolute;font-style:normal;color:#ef4444;font-size:15px;opacity:0;animation:heart 1.8s ease-out infinite}
+.hearts i:nth-child(2){left:18px;animation-delay:.9s;font-size:12px}
+
+.stale{position:fixed;right:12px;top:34px;margin:0;padding:6px 10px;border-radius:8px;background:var(--warnbg);color:var(--warn);font-size:12px}
+.stale[hidden]{display:none}
+
+@keyframes zzz{0%{opacity:0;transform:translate(0,0)}20%{opacity:1}100%{opacity:0;transform:translate(18px,-28px)}}
+@keyframes heart{0%{opacity:0;transform:translateY(0) scale(.6)}25%{opacity:1}100%{opacity:0;transform:translateY(-30px) scale(1.1)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+
+/* 브라우저 시험용(?demo) 가짜 창, 아이콘, 메뉴 막대 */
+.demo-win{position:fixed;background:#fff;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.demo-icon{position:fixed;width:64px;height:52px;margin-top:6px;border-radius:8px;background:#3b9cf6}
+.demo-bar{position:fixed;left:0;right:0;top:0;height:24px;background:rgba(255,255,255,.45)}

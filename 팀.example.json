@@ -1,0 +1,66 @@
+{
+  "title": "우리 팀 고양이들",
+  "catWidth": 166,
+  "columns": 3,
+  "staleSec": 60,
+  "cats": [
+    {
+      "key": "dev",
+      "name": "뭉치",
+      "role": "개발자",
+      "variant": "gray",
+      "prop": "headphones",
+      "match": [
+        "내-프로젝트-폴더",
+        "my-project"
+      ]
+    },
+    {
+      "key": "plan",
+      "name": "모모",
+      "role": "기획자",
+      "variant": "tabby",
+      "prop": "postit",
+      "task": "기획 작업중",
+      "match": [
+        "기획",
+        "prd"
+      ]
+    },
+    {
+      "key": "data",
+      "name": "나비",
+      "role": "데이터",
+      "variant": "white",
+      "prop": "chart",
+      "match": [
+        "데이터",
+        "analytics"
+      ]
+    },
+    {
+      "key": "qa",
+      "name": "도리",
+      "role": "QA",
+      "variant": "siamese",
+      "prop": "paper",
+      "fixed": {
+        "main": "배포 대기중",
+        "sub": "시작 신호를 기다리는 중"
+      }
+    },
+    {
+      "key": "people",
+      "name": "고미",
+      "role": "인사",
+      "variant": "tux",
+      "prop": "glasses",
+      "task": "채용 진행중",
+      "private": true,
+      "match": [
+        "채용",
+        "recruit"
+      ]
+    }
+  ]
+}
