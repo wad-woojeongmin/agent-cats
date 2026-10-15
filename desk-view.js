@@ -228,8 +228,11 @@
                icons: [{ x: 40, y: 80, w: 64, h: 64 }] });
     const win = W.windows[0], icon = W.icons[0];
     document.body.insertAdjacentHTML("afterbegin",
-      '<div class="demo-win" style="left:' + win.x + "px;top:" + win.y + "px;width:" + win.w + "px;height:" + win.h + 'px"></div>' +
-      '<div class="demo-icon" style="left:' + icon.x + "px;top:" + icon.y + 'px"></div><div class="demo-bar"></div>');
+      '<div class="demo-win" style="left:' + win.x + "px;top:" + win.y + "px;width:" + win.w + "px;height:" + win.h + 'px">' +
+      '<div class="demo-title"><i></i><i></i><i></i></div><div class="demo-body"><b></b><b></b><b></b><b></b></div></div>' +
+      '<div class="demo-icon" style="left:' + icon.x + "px;top:" + icon.y + 'px"><span>작업 폴더</span></div><div class="demo-bar"></div>');
+    const size = Number(new URLSearchParams(location.search).get("size"));   // ?demo&size=130: 고양이 크기 (48~200)
+    if (size >= 48 && size <= 200) window.desk.settings({ size });
   }
   setInterval(poll, 15000);
   poll();
