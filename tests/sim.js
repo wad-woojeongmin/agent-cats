@@ -275,6 +275,30 @@ jumpOntoClosing(true);
       if (chasing(a)) { start = start || t; lastChase = t - start; }
     }
     if (lastChase < 29000 || lastChase > 30500) fail("흔들기: 계속 움직일 때 " + Math.round(lastChase / 1000) + "초 쫓았다 (30초여야)"); }
+  { const a = mk("w12", idle(), {}, -350); wait(1.6); B.cats = [a];   // 쫓기 관성: 최고 속도, 방향 바꿀 때 미끄러짐, 커서 앞에서 서기
+    const y = () => a.y - B.catH() / 2;
+    shake(a);
+    for (let i = 0; i < 16; i++) mouse(a.x + 30, y() + (i % 2 ? 6 : -6));
+    if (!chasing(a)) fail("관성: 시험 준비 실패, 쫓는 중이 아니다");
+    let top = 0;
+    for (let i = 0; i < 25; i++) { const x0 = a.x; mouse(a.x + 300, y() + (i % 2 ? 6 : -6)); top = Math.max(top, Math.abs(a.x - x0) / 0.066); }
+    if (top < 0.95 * B.chaseSpeed || top > B.chaseSpeed + 1) fail("관성: 곧게 쫓을 때 최고 속도 " + Math.round(top) + "px/s (" + B.chaseSpeed + "쯤이어야)");
+    const xr = a.x, back = a.x - 300, t0 = t, sx = [];               // 오른쪽으로 달리는 중에 커서를 왼쪽으로 옮겨 세워 둔다 (3초 규칙에 안 걸리게 위아래로만 살짝)
+    let over = 0, turned = 0, settle = 0;
+    for (let i = 0; i < 75 && chasing(a); i++) {
+      mouse(back, y() + (i % 2 ? 6 : -6));
+      over = Math.max(over, a.x - xr);
+      if (!turned && a.x < xr && a.dir === -1) turned = t - t0;
+      if (!settle && a.pose === "play") settle = t - t0;
+      if (i >= 45) sx.push(Math.sign(Math.round(a.vx)));               // 마지막 2초
+    }
+    const nz = sx.filter((v) => v), flips = nz.slice(1).filter((v, i) => v !== nz[i]).length;
+    if (over < 30) fail("관성: 커서가 반대로 갔는데 " + Math.round(over) + "px 만 미끄러졌다 (30px 넘어야)");
+    if (!turned) fail("관성: 미끄러진 뒤 돌아서 오지 않았다");
+    if (!settle || a.pose !== "play") fail("관성: 커서 앞에서 멈춰 놀지 않았다");
+    if (Math.abs(a.x - back) > size * 0.5) fail("관성: 커서에서 " + Math.round(Math.abs(a.x - back)) + "px 떨어져 섰다");
+    if (flips > 1) fail("관성: 커서 앞에서 " + flips + "번 앞뒤로 흔들렸다");
+    console.log("쫓기: 최고 " + Math.round(top) + "px/s, 미끄러짐 " + Math.round(over) + "px, 돌아섬 " + (turned / 1000).toFixed(2) + "초, 서기 " + (settle / 1000).toFixed(2) + "초 (마지막 2초 앞뒤 바뀜 " + flips + "번)"); }
 }
 
 console.log("모의 " + STEPS + "걸음 (" + Math.round(STEPS * DT / 60) + "분), 고양이 " + main.length + "마리");

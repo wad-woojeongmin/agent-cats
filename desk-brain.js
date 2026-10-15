@@ -16,7 +16,11 @@
   const SPEED = { walk: 46, run: 170 };
   const TICK = { walk: 150, run: 90 };
   const CHASE_FAR = 5;                                 // 커서가 고양이 너비의 이 배보다 CHASE_FAR_GRACE 넘게 멀어지면 쫓기를 그만둔다
-  const CHASE_FAR_GRACE = 500;                         // ms. 짧아야 한다: 고양이가 170px/s 로 다가가므로 1.5초면 문턱 안으로 들어와 버린다
+  const CHASE_FAR_GRACE = 500;                         // ms. 멀어진 순간의 고양이 자리에서 재므로 고양이가 다가가도 늘지 않는다
+  const CHASE_SPEED = 480;                             // px/s. 쫓을 때 최고 속도
+  const CHASE_ACCEL = 1600;                            // px/s². 방향을 바꾸거나 속도를 올릴 때. 빨리 달리던 만큼 오래 미끄러진다
+  const CHASE_BRAKE = 2400;                           // px/s². 커서 앞에서 설 때는 조금 세게 선다
+  const CHASE_STOP = 40;                               // px/s. 이보다 느려지면 멈춘 것으로 보고 톡톡 친다
   const rand = W.rand, pick = (a) => a[Math.floor(Math.random() * a.length)];
   const catW = () => S.size, catH = () => S.size * G.h / G.w;
   const on = (k) => S.behaviors[k] !== false;
@@ -125,7 +129,7 @@
       return mine.concat(after(1));
     } }
   ];
-  B.chaseFar = CHASE_FAR;                                             // tests/sim.js 가 쓴다
+  B.chaseFar = CHASE_FAR; B.chaseSpeed = CHASE_SPEED;                 // tests/sim.js 가 쓴다
   B.idle = IDLE;                                                      // tests/sim.js 가 '서로 놀기'를 바로 불러 본다
   const free = (o) => !o.pinned && !o.held && !o.perch && (!o.cur || o.cur.type === "stay") &&
                       ![o.cur].concat(o.queue).some((s) => s && (s.love || s.meet));   // 이미 다른 친구와 노는(기다리는) 중이면 빼 둔다
@@ -157,7 +161,7 @@
     step.t0 = now;
     if (step.type === "jump") { step.x0 = c.x; step.y0 = c.y; step.dur = 450 + Math.min(500, Math.hypot(step.x - c.x, step.y - c.y)); c.perch = null; }
     if (step.type === "stay" && step.face) c.dir = step.face;
-    if (step.type === "chase") step.until = now + step.dur;
+    if (step.type === "chase") { step.until = now + step.dur; c.vx = c.vy = 0; }
     c.cur = step;
     B.onAction?.(c, step);
   }
@@ -167,22 +171,37 @@
     if (c.held) { c.pose = "jump"; c.frame = 1; return; }
     const s = c.cur;
     c.love = false;
-    if (s.type === "move" || s.type === "chase") {
-      let tx = s.x, ty = s.y, g = s.gait;
-      if (s.type === "chase") {
-        tx = W.mouse.x; ty = W.clampFloor(W.mouse.x, W.mouse.y + catH() * 0.3, catW(), catH())[1]; g = "run";
-        if (now > s.until || now - W.mouse.moved > 3000) return finish(c, now);   // 다른 화면으로 가면 위치가 안 오므로 멈춘 것과 같다
-        if (Math.hypot(W.mouse.x - c.x, W.mouse.y - (c.y - catH() / 2)) <= catW() * CHASE_FAR) s.far = 0;   // 너무 멀리 가 있으면 흥미를 잃는다
-        else if (!s.far) s.far = now;
-        else if (now - s.far > CHASE_FAR_GRACE) return finish(c, now);
-      }
+    if (s.type === "chase") {
+      const tx = W.mouse.x, ty = W.clampFloor(W.mouse.x, W.mouse.y + catH() * 0.3, catW(), catH())[1];
+      if (now > s.until || now - W.mouse.moved > 3000) return finish(c, now);   // 다른 화면으로 가면 위치가 안 오므로 멈춘 것과 같다
+      /* 너무 멀리 가 있으면 흥미를 잃는다. 멀어진 순간 고양이 자리(s.fx, s.fy)를 적어 두고 거기서 잰다:
+         달리는 고양이에서 재면 고양이가 다가가 문턱 안으로 들어와 버려 영영 안 그만둔다 */
+      const ox = s.far ? s.fx : c.x, oy = s.far ? s.fy : c.y;
+      if (Math.hypot(W.mouse.x - ox, W.mouse.y - (oy - catH() / 2)) <= catW() * CHASE_FAR) s.far = 0;
+      else if (!s.far) { s.far = now; s.fx = c.x; s.fy = c.y; }
+      else if (now - s.far > CHASE_FAR_GRACE) return finish(c, now);
+      /* 속도(c.vx, c.vy)를 바라는 속도 쪽으로 가속도만큼만 튼다. 다가갈수록 바라는 속도를 줄여 문턱(r)에서 선다 */
+      const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy), r = catW() * 0.45;
+      const want = Math.min(CHASE_SPEED, Math.sqrt(2 * CHASE_BRAKE * Math.max(0, d - r)));
+      let ux = (d ? dx / d * want : 0) - c.vx, uy = (d ? dy / d * want : 0) - c.vy;
+      const u = Math.hypot(ux, uy), a = (want < Math.hypot(c.vx, c.vy) ? CHASE_BRAKE : CHASE_ACCEL) * dt;
+      if (u > a) { ux *= a / u; uy *= a / u; }
+      c.vx += ux; c.vy += uy;
+      const [fx, fy] = W.clampFloor(c.x + c.vx * dt, c.y + c.vy * dt, catW(), catH());   // 미끄러져도 바닥 밖으로는 안 나간다
+      if (fx !== c.x + c.vx * dt) c.vx = 0;
+      if (fy !== c.y + c.vy * dt) c.vy = 0;
+      c.x = fx; c.y = fy;
+      if (Math.abs(c.vx) > 15) c.dir = c.vx > 0 ? 1 : -1;                    // 미끄러지는 동안은 원래 쪽을 본다
+      c.frame = 0;
+      if (d <= r && Math.hypot(c.vx, c.vy) < CHASE_STOP) { c.vx = c.vy = 0; c.pose = "play"; return; }
+      c.pose = "run";
+    } else if (s.type === "move") {
+      const tx = s.x, g = s.gait;
+      let ty = s.y;
       if (c.perch) ty = c.y;
       const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy), v = SPEED[g] * dt;
       if (Math.abs(dx) > 2) c.dir = dx > 0 ? 1 : -1;
-      if (d <= Math.max(v, s.type === "chase" ? catW() * 0.45 : 2)) {
-        if (s.type === "chase") { c.pose = "play"; c.frame = 0; return; }
-        c.x = tx; c.y = ty; return finish(c, now);
-      }
+      if (d <= Math.max(v, 2)) { c.x = tx; c.y = ty; return finish(c, now); }
       c.x += dx / d * v; c.y += dy / d * v;
       if (c.perch) {
         c.x = Math.min(Math.max(c.x, c.perch.a), c.perch.b);
@@ -222,7 +241,7 @@
       }
     }
   }
-  function finish(c, now) { c.cur = null; const next = c.queue.shift(); if (next) begin(c, next, now); }
+  function finish(c, now) { c.cur = null; c.vx = c.vy = 0; const next = c.queue.shift(); if (next) begin(c, next, now); }
 
   /* 창 횃대면 창 왼쪽 끝에서 고양이까지(dx)를 다시 잰다. 창이 움직이면 이만큼 떨어져 따라간다 */
   function markDx(c) {
