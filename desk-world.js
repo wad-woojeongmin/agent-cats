@@ -8,7 +8,7 @@
     floor: { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth },   // Dock 을 뺀 영역
     windows: [],                         // 앞에서 뒤 순서 [{id, x, y, w, h}]
     icons: [],                           // [{x, y, w, h}]
-    mouse: { x: -1, y: -1, moved: 0 },   // moved: 마지막으로 움직인 시각(ms)
+    mouse: { x: -1, y: -1, moved: 0, hist: [] },   // moved: 마지막으로 움직인 시각(ms), hist: 최근 1.5초 [{x, y, t}]
     native: !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cat)
   };
 
@@ -18,7 +18,27 @@
     if (o.floor) W.floor = o.floor;
     if (o.windows) W.windows = o.windows;
     if (o.icons) W.icons = o.icons;
-    if (o.mouse) { W.mouse.x = o.mouse.x; W.mouse.y = o.mouse.y; W.mouse.moved = Date.now(); }
+    if (o.mouse) {
+      const m = W.mouse, t = o.mouse.t || Date.now();               // t: 시험용
+      m.x = o.mouse.x; m.y = o.mouse.y; m.moved = t;
+      m.hist.push({ x: m.x, y: m.y, t });
+      while (m.hist[0].t < t - 1500) m.hist.shift();
+    }
+  };
+
+  /* 커서 흔들기: 최근 1초 사이 좌우 방향이 WIGGLE_TURNS번 이상 바뀌고 120px 이상 움직였다 */
+  const WIGGLE_TURNS = 5;                                            // 방향 전환 횟수. 3번은 너무 쉽게 반응해서 5번으로 올렸다
+  W.wiggle = function (now) {
+    const h = W.mouse.hist.filter((p) => p.t >= now - 1000);
+    let turns = 0, dist = 0, sign = 0;
+    for (let i = 1; i < h.length; i++) {
+      const dx = h[i].x - h[i - 1].x;
+      dist += Math.hypot(dx, h[i].y - h[i - 1].y);
+      if (Math.abs(dx) < 2) continue;
+      if (sign && Math.sign(dx) !== sign) turns++;
+      sign = Math.sign(dx);
+    }
+    return turns >= WIGGLE_TURNS && dist >= 120;
   };
 
   if (!W.native) {

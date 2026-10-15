@@ -7,8 +7,8 @@
 import Foundation
 
 final class StatusCollector {
-    static let runningWithin = 300.0     // 초. 이 안에 기록이 움직였으면 일하는 중
-    static let openTurnMax = 45.0 * 60   // 초. 기록이 조용해도 한 턴이 안 끝났으면 이만큼은 일하는 중
+    static let runningWithin = 300.0     // 초. 턴을 모를 때만: 이 안에 기록이 움직였으면 일하는 중
+    static let openTurnMax = 45.0 * 60   // 초. 턴이 안 끝났으면 기록이 조용해도 이만큼은 일하는 중. 끝난 턴은 바로 쉼
     static let tail = 900_000
 
     private let teamURL: URL
@@ -36,8 +36,10 @@ final class StatusCollector {
     func collect() throws -> [String: Any] { try collectAll().data }
 
     /// collect() 에 더해 고양이마다 따라간 세션 (key → 세션 id, 작업 폴더). 세션을 못 찾은 고양이는 없다.
-    /// 세션은 앱 안(우클릭 "작업 열기")에서만 쓰고 화면(JS)으로는 보내지 않는다
-    func collectAll() throws -> (data: [String: Any], sessions: [String: (id: String, cwd: String)]) {
+    /// 세션은 앱 안(우클릭 "작업 열기")에서만 쓰고 화면(JS)으로는 보내지 않는다.
+    /// attention: 사용자 차례인 고양이 (key → 종류 "reply"|"question", 그 일을 가리키는 stamp). 화면에는 종류만 간다
+    func collectAll() throws -> (data: [String: Any], sessions: [String: (id: String, cwd: String)],
+                                 attention: [String: (kind: String, stamp: String)]) {
         let obj = try JSONSerialization.jsonObject(with: Data(contentsOf: teamURL))
         guard let cfg = obj as? [String: Any], let rawCats = cfg["cats"] as? [Any] else { throw CocoaError(.fileReadCorruptFile) }
         let cats = try rawCats.map { c -> [String: Any] in
@@ -48,16 +50,18 @@ final class StatusCollector {
         let sessions = allSessions(logs)
         var status: [String: Any] = [:]
         var following: [String: (id: String, cwd: String)] = [:]
+        var attention: [String: (kind: String, stamp: String)] = [:]
         for c in cats where truthy(c["match"]) && !truthy(c["fixed"]) {
             guard let key = c["key"] as? String else { throw CocoaError(.fileReadCorruptFile) }   // 파이썬도 key 가 없으면 멈춘다
             let r = build(c, sessions, logs)
             status[key] = r.status
             if let s = r.session, !s.cli.isEmpty { following[key] = (s.cli, s.cwd) }
+            if r.session != nil, let a = r.attention { attention[key] = a }
         }
         let pub = cats.map { $0.filter { $0.key != "match" } }
         func get(_ k: String, _ def: Any) -> Any { cfg.index(forKey: k).map { cfg[$0].value } ?? def }   // 있으면 null 이어도 그대로
         return (["title": get("title", ""), "catWidth": get("catWidth", 166), "columns": get("columns", 3),
-                 "staleSec": get("staleSec", 60), "updated": nowMs(), "cats": pub, "status": status], following)
+                 "staleSec": get("staleSec", 60), "updated": nowMs(), "cats": pub, "status": status], following, attention)
     }
 
     /// "작업 열기" 용 .command 내용: 작업 폴더로 가서 세션을 이어 연다. id 는 [A-Za-z0-9-] 만, 폴더는 zsh 작은따옴표로 감싼다
@@ -185,38 +189,57 @@ final class StatusCollector {
 
     // MARK: 상태 만들기
 
-    /// 상태와 고른 세션 (못 찾으면 nil)
-    private func build(_ cat: [String: Any], _ sessions: [Session], _ logs: Logs) -> (status: [String: Any], session: Session?) {
+    static let askTools: Set<String> = ["AskUserQuestion", "ExitPlanMode"]   // 사용자 답을 기다리는 도구
+
+    /// 상태, 고른 세션 (못 찾으면 nil), 사용자 차례인지 (status 에는 넣지 않는다. 수집.py 와 같아야 해서)
+    private func build(_ cat: [String: Any], _ sessions: [Session], _ logs: Logs)
+        -> (status: [String: Any], session: Session?, attention: (kind: String, stamp: String)?) {
         let now = nowMs()
         let found = findSessions(sessions, needles(cat["match"]))
-        guard var s = found.first else { return (["state": "missing", "now": now], nil) }
+        guard var s = found.first else { return (["state": "missing", "now": now], nil, nil) }
         var act = activity(s, logs)
         for d in found.dropFirst() {
             let a = activity(d, logs)
             if a.last.doubleValue > act.last.doubleValue { s = d; act = a }
         }
         var tool = "", tinp: Any? = nil, said = "", turnOpen: Bool? = nil
+        var reply: String?, question: String?, answered = Set<String>(), prompted = false   // 뒤에서부터: 답한 도구 id, 그 뒤 새 질문을 했는지
+        var seen = false, done = false   // seen: 마지막 대화 줄을 봤는지. done: 수집.py 가 멈추는 곳을 지났는지 (그 뒤로는 "!" 만 찾는다)
         if let log = act.log {
             tailEvents(log) { ev in
                 let type = ev["type"] as? String
-                if turnOpen == nil, type == "user" || type == "assistant", !truthy(ev["isMeta"]), !truthy(ev["isSidechain"]) {
-                    turnOpen = type == "user" || (ev["message"] as? [String: Any])?["stop_reason"] as? String != "end_turn"
-                }
+                let main = (type == "user" || type == "assistant") && !truthy(ev["isMeta"]) && !truthy(ev["isSidechain"])
                 let msg = ev["message"] as? [String: Any] ?? [:]
-                guard type == "assistant", let content = msg["content"] as? [Any] else { return false }
+                if !seen, main {
+                    seen = true
+                    let open = type == "user" || msg["stop_reason"] as? String != "end_turn"
+                    if !done { turnOpen = open }
+                    if !open { reply = Self.stamp(ev) }
+                }
+                if main, type == "user" {
+                    let parts = msg["content"] as? [Any] ?? [msg["content"] as Any]
+                    for p in parts {
+                        if let d = p as? [String: Any], d["type"] as? String == "tool_result" { answered.insert(str(d["tool_use_id"])) } else { prompted = true }
+                    }
+                }
+                guard type == "assistant", let content = msg["content"] as? [Any] else { return done && seen }
                 for case let part as [String: Any] in content {
                     let ptype = part["type"] as? String
+                    if question == nil, main, !prompted, ptype == "tool_use", Self.askTools.contains(str(part["name"])),
+                       !answered.contains(str(part["id"])) { question = Self.stamp(ev) }
                     if tool.isEmpty && ptype == "tool_use" {
                         tool = part["name"] as? String ?? ""
                         tinp = part["input"]
                     }
                     if said.isEmpty && ptype == "text" { said = Self.firstLine(part["text"] as? String ?? "") }
                 }
-                return !tool.isEmpty && !said.isEmpty
+                done = done || (!tool.isEmpty && !said.isEmpty)
+                return done && seen
             }
         }
         let age = (Double(now) - act.last.doubleValue) / 1000
-        let running = age < Self.runningWithin || (turnOpen == true && age < Self.openTurnMax)
+        // 턴을 알면 턴만 본다 (막 끝난 턴은 기록이 새것이어도 쉼). 모르면 (기록 없음 등) 최근에 움직였는지로
+        let running = turnOpen.map { $0 && age < Self.openTurnMax } ?? (age < Self.runningWithin)
         var out: [String: Any] = ["state": running ? "working" : "idle", "title": s.title,
                                   "folder": basename(rstrip(s.cwd, "/")),
                                   "doing": tool.isEmpty ? "" : Self.describe(tool, tinp), "step": Self.firstSentence(said),
@@ -228,8 +251,11 @@ final class StatusCollector {
             out["title"] = ""
             out["doing"] = tool.isEmpty ? "" : Self.phrase(tool)
         }
-        return (out, s)
+        return (out, s, question.map { ("question", $0) } ?? reply.map { ("reply", $0) })
     }
+
+    /// 기록 한 줄을 가리키는 값: uuid, 없으면 timestamp
+    private static func stamp(_ ev: [String: Any]) -> String { [str(ev["uuid"]), str(ev["timestamp"])].first { !$0.isEmpty } ?? "" }
 
     /// match 가 문자열이면 파이썬처럼 한 글자씩 본다
     private func needles(_ m: Any?) -> [String] {

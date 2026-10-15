@@ -9,22 +9,22 @@ struct OtherView: View {
     @EnvironmentObject var settings: PetSettings
     @EnvironmentObject var feed: StatusFeed
     @EnvironmentObject var stages: Stages
+    @EnvironmentObject var router: Router
     @State private var loginOn = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
     @State private var skillNote: String?
 
     var body: some View {
+        VStack(spacing: 0) {
+            PageHeader(title: "기타 설정")
+            Divider()
+            form
+        }
+        .onExitCommand { router.pop() }
+    }
+
+    private var form: some View {
         Form {
-            Section("보이기") {
-                LabeledContent("투명도") {
-                    Slider(value: $settings.opacity, in: 0.2...1)
-                    Text("\(Int(settings.opacity * 100))%").monospacedDigit().frame(width: 40, alignment: .trailing)
-                }
-                LabeledContent("크기") {
-                    Slider(value: $settings.size, in: 64...166, step: 2)
-                    Text("\(Int(settings.size))px").monospacedDigit().frame(width: 48, alignment: .trailing)
-                }
-            }
             Section("앱") {
                 Toggle("로그인할 때 자동으로 켜기", isOn: Binding(get: { loginOn }, set: setLogin))
                 if let loginError { Text(loginError).font(.caption).foregroundStyle(.secondary) }
@@ -49,12 +49,8 @@ struct OtherView: View {
                 Text(skillNote ?? "설치하면 Claude Code 에서 \"고양이 추가해줘\" 라고 해서 그 세션의 고양이를 만들 수 있어요.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section {
-                Button("고양이 팀 종료") { NSApp.terminate(nil) }
-            }
         }
         .formStyle(.grouped)
-        .navigationTitle("기타 설정")
     }
 
     /// 번들의 cat-add 스킬을 ~/.claude/skills/cat-add/SKILL.md 로 복사한다. 같은 자리에 남의 파일이 있으면 덮어쓰지 않는다

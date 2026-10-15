@@ -30,6 +30,8 @@ final class PetSettings: ObservableObject {
     @Published var activity: Double { didSet { d.set(activity, forKey: "activity") } }
     @Published var bubbleSec: Int { didSet { d.set(bubbleSec, forKey: "bubbleSec") } }
     @Published var behaviors: [String: Bool] { didSet { d.set(behaviors, forKey: "behaviors") } }
+    /// 고양이 행동 기록 (화면 없음: defaults write local.catteam debugLog -bool true)
+    var debugLog: Bool { d.bool(forKey: "debugLog") }
     /// 바탕화면 아이콘 위치를 읽을 자동화 권한이 거부됐는지 (설정이 아니라 상태)
     @Published var iconsDenied = false
 
@@ -51,11 +53,17 @@ final class PetSettings: ObservableObject {
         var b: [String: Bool] = [:]
         PetSettings.behaviors.forEach { b[$0.id] = isOn($0.id) }
         if iconsDenied { b["icons"] = false }
-        return ["enabled": enabled, "size": size, "activity": activity, "bubbleSec": bubbleSec, "behaviors": b]
+        return ["enabled": enabled, "size": size, "activity": activity, "bubbleSec": bubbleSec, "behaviors": b, "debugLog": debugLog]
     }
 
     /// 사용자가 고른 디스플레이 {고양이 key: 디스플레이 UUID}. 없는 고양이는 자동으로 나눈다
     @Published var displays: [String: String] { didSet { d.set(displays, forKey: "displays") } }
+
+    /// 확인한 "!" {고양이 key: 그 일의 stamp}. nil 이면 처음 켠 것 (그때 떠 있던 것은 확인한 셈 친다)
+    var acks: [String: String]? {
+        get { d.dictionary(forKey: "acks") as? [String: String] }
+        set { d.set(newValue, forKey: "acks") }
+    }
 
     /// 고양이 위치와 고정 여부 (desk-view.js 가 보내 준 그대로)
     var savedCats: [String: Any] {

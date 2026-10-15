@@ -26,6 +26,31 @@
     if (prop.monitor) prop.monitor(ctx);
   }
 
+  /* 그림 둘레 빈칸을 테두리(O)로 칠한 새 격자 */
+  function outline(g) {
+    const o = g.map((row) => row.slice());
+    for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
+      if (g[y][x] !== ".") continue;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => (g[y + dy] || [])[x + dx] && g[y + dy][x + dx] !== ".")) o[y][x] = "O";
+    }
+    return o;
+  }
+
+  /* 격자를 가로로 이어 붙인 사각형으로 줄여서 SVG 로 만든다 */
+  function svg(grid, variant) {
+    let rects = "";
+    grid.forEach((row, y) => {
+      let x = 0;
+      while (x < row.length) {
+        const ch = row[x]; let n = 1;
+        while (row[x + n] === ch) n++;
+        if (ch !== ".") rects += '<rect x="' + x + '" y="' + y + '" width="' + n + '" height="1" fill="' + window.catColor(variant, ch) + '"/>';
+        x += n;
+      }
+    });
+    return '<svg viewBox="0 0 ' + grid[0].length + " " + grid.length + '" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">' + rects + "</svg>";
+  }
+
   function frame(cat, st) {
     const variant = window.CAT_VARIANTS[cat.variant] ? cat.variant : "white";
     const g = Array.from({ length: GH }, () => Array(GW).fill("."));
@@ -41,11 +66,7 @@
     if (desk && st.pose !== "wait") monitor(ctx);
     (window.CAT_POSES[st.pose] || window.CAT_POSES.sleep)(ctx);
     if (ctx.shiftLeft && !st.bare) for (let y = 0; y < 21; y++) g[y] = g[y].slice(ctx.shiftLeft).concat(Array(ctx.shiftLeft).fill("."));
-    const o = g.map((row) => row.slice());                                              // 테두리
-    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
-      if (g[y][x] !== ".") continue;
-      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => (g[y + dy] || [])[x + dx] && g[y + dy][x + dx] !== ".")) o[y][x] = "O";
-    }
+    const o = outline(g);
     let x0 = GW, y0 = GH, x1 = 0, y1 = 0;                                               // 실제 그림이 있는 칸의 경계
     o.forEach((row, y) => row.forEach((ch, x) => { if (ch !== ".") { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + 1); y1 = Math.max(y1, y + 1); } }));
     return { grid: o, variant, bbox: [x0, y0, x1, y1] };
@@ -53,19 +74,23 @@
 
   window.catFrame = frame;
 
-  /* 한 프레임을 가로로 이어 붙인 사각형으로 줄여서 SVG 로 만든다 */
+  /* 느낌표: (x, y) 가 막대 왼쪽 위. 막대 2x4, 한 칸 띄고 점 2x2. 둘 다 왼쪽 위 칸은 반짝임(h) */
+  window.drawBang = function (R, x, y, key) {
+    R(x, y, 2, 4, key); R(x, y + 5, 2, 2, key);
+    R(x, y, 1, 1, "h"); R(x, y + 5, 1, 1, "h");
+  };
+
+  /* 한 프레임을 SVG 로 */
   window.drawCat = function (cat, st) {
     const { grid, variant } = frame(cat, st);
-    let rects = "";
-    grid.forEach((row, y) => {
-      let x = 0;
-      while (x < row.length) {
-        const ch = row[x]; let n = 1;
-        while (row[x + n] === ch) n++;
-        if (ch !== ".") rects += '<rect x="' + x + '" y="' + y + '" width="' + n + '" height="1" fill="' + window.catColor(variant, ch) + '"/>';
-        x += n;
-      }
-    });
-    return '<svg viewBox="0 0 ' + GW + " " + GH + '" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">' + rects + "</svg>";
+    return svg(grid, variant);
+  };
+
+  /* 느낌표만 따로 (테두리 포함 4x9 칸). 고양이와 같은 칸 크기로 그리면 된다 */
+  window.BANG_GRID = { w: 4, h: 9 };
+  window.bangSVG = function (key) {
+    const g = Array.from({ length: 9 }, () => Array(4).fill("."));
+    window.drawBang((x, y, w, h, c) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) g[yy][xx] = c; }, 1, 1, key);
+    return svg(outline(g), "white");
   };
 })();

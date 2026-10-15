@@ -1,6 +1,6 @@
 // 화면(JS)과 앱 사이의 말 전달. 디스플레이(무대)마다 하나씩 있다.
 // JS → 앱: window.webkit.messageHandlers.cat.postMessage({type, ...})
-// 앱 → JS: desk.settings / desk.world / desk.pin / desk.unpinAll / desk.status / desk.greet
+// 앱 → JS: desk.settings / desk.world / desk.pin / desk.unpinAll / desk.status / desk.attention / desk.greet
 import Cocoa
 import WebKit
 
@@ -70,6 +70,8 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             if let cats = body["cats"] as? [String: Any] {
                 hub.settings.savedCats = hub.settings.savedCats.merging(cats) { $1 }
             }
+        case "ack":
+            if let key = body["key"] as? String { hub.onAck?(key) }
         case "menu":
             if let key = body["key"] as? String {
                 hub.menu.show(from: self, key: key, name: body["name"] as? String ?? key, pinned: body["pinned"] as? Bool ?? false)
@@ -78,8 +80,30 @@ final class Bridge: NSObject, WKScriptMessageHandler {
             if let items = body["items"] as? [String: Any] { hub.store.setThumbs(items) }
         case "lines":
             if let items = body["items"] as? [String: Any] { hub.store.setLines(items) }
+        case "action":
+            if let key = body["key"] as? String, let act = body["act"] as? String {
+                let name = hub.store.cats.first { $0.key == key }?.name ?? key
+                Bridge.logAction(name: name.isEmpty ? key : name, key: key, act: act)
+            }
         default:
             break
+        }
+    }
+
+    /// 행동 기록 한 줄: ~/Library/Logs/고양이팀/actions.log
+    private static let actionLog: URL = {
+        let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs/고양이팀")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("actions.log")
+    }()
+    private static let iso = ISO8601DateFormatter()
+
+    static func logAction(name: String, key: String, act: String) {
+        let line = Data([iso.string(from: Date()), name, key, act].joined(separator: "\t").appending("\n").utf8)
+        if let h = try? FileHandle(forWritingTo: actionLog) {
+            h.seekToEndOfFile(); h.write(line); h.closeFile()
+        } else {
+            try? line.write(to: actionLog)
         }
     }
 }

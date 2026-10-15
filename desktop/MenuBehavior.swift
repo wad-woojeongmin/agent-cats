@@ -5,8 +5,18 @@ import SwiftUI
 
 struct BehaviorView: View {
     @EnvironmentObject var settings: PetSettings
+    @EnvironmentObject var router: Router
 
     var body: some View {
+        VStack(spacing: 0) {
+            PageHeader(title: "행동 설정")
+            Divider()
+            form
+        }
+        .onExitCommand { router.pop() }
+    }
+
+    private var form: some View {
         Form {
             Section("행동") {
                 ForEach(PetSettings.behaviors) { b in
@@ -39,6 +49,5 @@ struct BehaviorView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("행동 설정")
     }
 }

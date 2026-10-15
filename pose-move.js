@@ -1,6 +1,7 @@
 /* 데스크톱에서 움직이는 자세. 오른쪽을 보는 옆모습이고, 왼쪽을 볼 때는 화면에서 뒤집는다.
    발끝은 20번 줄(앉은 자세와 같은 바닥), 몸 가운데는 28번 칸 언저리다.
-   walk/run(4프레임), jump(0: 웅크림, 1: 공중), stretch, rest(쉬기), play(앞발로 톡톡), sitside(옆으로 앉기). */
+   walk/run(4프레임), jump(0: 웅크림, 1: 공중), stretch, rest(쉬기), play(앞발로 톡톡), sitside(옆으로 앉기),
+   alert(놀람: 0 웅크림, 1 공중, 2 섬. 머리 위에 "!", 뛰어오르는 높이는 화면에서 준다). */
 window.CAT_POSES = window.CAT_POSES || {};
 
 (function () {
@@ -16,7 +17,8 @@ window.CAT_POSES = window.CAT_POSES || {};
     const { R } = ctx, [hx, hy] = ctx.headAt, eye = ctx.eyeKey;
     R(hx + 6, hy + 4, 3, 2, ctx.feature === "mask" ? "T" : "W");                              // 주둥이
     R(hx + 8, hy + 4, 1, 1, "P");                                                             // 코
-    if (open && !ctx.shut) R(hx + 6, hy + 2, 1, 2, eye); else R(hx + 5, hy + 3, 2, 1, eye);
+    if (ctx.wide) R(hx + 5, hy + 2, 2, 2, eye);                                               // 놀라서 크게 뜬 눈
+    else if (open && !ctx.shut) R(hx + 6, hy + 2, 1, 2, eye); else R(hx + 5, hy + 3, 2, 1, eye);
   }
 
   function leg(ctx, x, top, len) {
@@ -115,5 +117,19 @@ window.CAT_POSES = window.CAT_POSES || {};
     if (hit) { ctx.R(33, 18, 6, 2, "C"); ctx.R(37, 18, 2, 2, "W"); }                          // 앞발을 뻗어 톡
     else { ctx.R(36, 15, 2, 4, "C"); ctx.R(36, 15, 2, 1, "W"); }                              // 앞발을 든다
     finish(ctx, { body: [20, 14, 13, 7], tail }, true);
+  };
+
+  window.CAT_POSES.alert = function (ctx) {
+    const { R } = ctx, f = ctx.st.frame || 0, low = f === 0 ? 2 : 0;
+    ctx.wide = true;
+    window.drawBang(R, 41, 1, "!");                                                          // 느낌표
+    const tail = tailUp(ctx, 18, 7 + low, 0);
+    R(20, 13 + low, 14, 5, "C");
+    if (f === 1) [21, 25, 28, 32].forEach((x) => leg(ctx, x, 18, 2));                        // 공중: 다리를 모은다
+    else [21, 25, 28, 32].forEach((x) => leg(ctx, x, 18 + low, 3 - low));
+    head(ctx, 31, 8 + low);
+    const [hx, hy] = ctx.headAt, ear = ctx.feature === "mask" ? "T" : "C";
+    R(hx + 1, hy - 3, 1, 1, ear); R(hx + 7, hy - 3, 1, 1, ear);                               // 쫑긋 선 귀
+    finish(ctx, { body: [20, 13 + low, 14, 5], tail }, true);
   };
 })();

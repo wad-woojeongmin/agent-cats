@@ -25,7 +25,7 @@ assert js.startswith("window.CATTEAM=") and js.endswith(";\n")
 sys.stdout.write(json.dumps(json.loads(js[len("window.CATTEAM="):-2]), sort_keys=True, ensure_ascii=False) + "\n")
 PY
 
-# 비교: 0 같음, 1 state 만 다름 (300초 경계일 수 있어 다시 돌린다), 2 다름
+# 비교: 0 같음, 1 살아 있는 기록에 따라 바뀌는 칸(state/last/doing/step)만 다름 (두 수집 사이에 기록이 바뀌었을 수 있어 다시 돌린다), 2 다름
 cat > "$T/compare.py" <<'PY'
 import json, sys
 s, p = (json.load(open(f, encoding="utf-8")) for f in sys.argv[1:3])
@@ -45,17 +45,21 @@ states = {}
 for v in p["status"].values(): states[v["state"]] = states.get(v["state"], 0) + 1
 print(f"{label}: 고양이 {len(p['cats'])}, 상태 {len(keys)} 중 같음 {same} {states}" + ("" if diffs else ", 모두 같음"))
 for d in diffs: print("  다름:", d)
-sys.exit(0 if not diffs else 1 if all(d.endswith(".state") for d in diffs) else 2)
+LIVE = (".state", ".last", ".doing", ".step")
+sys.exit(0 if not diffs else 1 if all(d.startswith("status[") and d.endswith(LIVE) for d in diffs) else 2)
 PY
 
 run() {   # 이름 설정 [메타 기록]
+    # 메타·기록을 따로 주면 일부러 만든 시험 기록이라 바뀔 일이 없다: 다시 돌리지 않는다
     local label=$1; shift
-    for try in 1 2; do
+    local tries=3; [ $# -gt 1 ] && tries=1
+    for try in $(seq 1 $tries); do
         "$T/parity" "$@" > "$T/s.json" 2> "$T/time.txt"
         python3 "$T/py_collect.py" "$1" "$T/out.js" "${@:2}" > "$T/p.json"
         rc=0; python3 "$T/compare.py" "$T/s.json" "$T/p.json" "$label" || rc=$?
         echo "  $(cat "$T/time.txt")"
-        [ $rc -eq 1 ] && [ $try -eq 1 ] && { echo "  state 만 달라서 다시 돌림"; continue; }
+        [ $rc -eq 0 ] && [ $try -gt 1 ] && echo "  살아 있는 세션이 그 사이 바뀌어 다시 맞춤 ($((try - 1))번)"
+        [ $rc -eq 1 ] && [ $try -lt $tries ] && { echo "  살아 있는 기록에 따라 바뀌는 칸만 달라서 다시 돌림"; continue; }
         [ $rc -eq 0 ] || FAIL=1
         break
     done
@@ -146,6 +150,12 @@ case(206, [user(), asst([text("끝냈어요")], stop="end_turn"), jl({"type": "u
 case(207, [user(), asst([text("오래된 것")], stop="end_turn")], age=3 * 86400)   # 이틀 넘음 → 없음
 case(208, [user(), asst([tool("Edit", {"file_path": "/비밀/파일.txt"}), text("비밀 보고입니다. 더")])], age=30, cat={"private": True})
 case(209, [user(), asst([tool("Edit", {"file_path": "/a.txt"})])], age=30, cat={"fixed": True})
+# 일하는 중 판단: 턴을 알면 턴만 본다 (막 끝난 턴은 바로 쉼), 모르면 300초 규칙
+case(218, [user(), asst([text("방금 끝냈어요")], stop="end_turn")], age=30)               # 닫힘 + 최근 → 쉼
+case(219, [user(), asst([text("도구 쓰는 중")], stop="tool_use")], age=30)               # 열림 + 최근 → 일함
+case(220, [jl({"type": "progress"})], age=30)                                           # 모름 + 최근 → 일함
+case(221, [jl({"type": "progress"})], age=600)                                          # 모름 + 오래됨 → 쉼
+case(222, [user(isMeta=True), asst([text("곁")], isSidechain=True)], age=30)            # 메타·곁가지만 → 모름 + 최근 → 일함
 # 원시 U+2028/U+0085 가 든 줄 (파이썬 splitlines 가 쪼개서 못 읽는 줄), 깨진 UTF-8, CRLF
 raw = "\n".join([jl({"type": "system", "cwd": "/w/case210-x"}), user(), asst([tool("Read", {"file_path": "/ok.txt"}), text("읽을 수 있는 줄입니다")])]).encode()
 raw += b"\r\n" + asst([tool("Edit", {"file_path": "/a b.txt"})]).encode() + b"\n"
@@ -202,4 +212,8 @@ PY
 run "시험 기록" "$T/fx/team.json" "$T/fx/meta" "$T/fx/projects"
 
 [ -n "${KEEP:-}" ] && cp "$T/s.json" "$KEEP"
+
+# 사용자 차례("!") 찾기: collect() 결과 밖이라 따로 시험한다
+swiftc -swift-version 5 -parse-as-library desktop/StatusCollector.swift tests/attention_test.swift -o "$T/attention"
+echo "사용자 차례:"; "$T/attention" || FAIL=1
 [ $FAIL -eq 0 ] && echo "모두 같음" || { echo "다른 곳이 있음"; exit 1; }

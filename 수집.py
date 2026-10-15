@@ -20,8 +20,8 @@ CONFIG = HERE / "팀.json"
 OUT = HERE / "status.js"
 META = Path(os.path.expanduser("~/Library/Application Support/Claude/claude-code-sessions"))
 PROJECTS = Path(os.path.expanduser("~/.claude/projects"))
-RUNNING_WITHIN = 300     # 초. 이 안에 기록이 움직였으면 일하는 중
-OPEN_TURN_MAX = 45 * 60  # 초. 기록이 조용해도 한 턴이 안 끝났으면 이만큼은 일하는 중으로 본다
+RUNNING_WITHIN = 300     # 초. 턴을 모를 때만: 이 안에 기록이 움직였으면 일하는 중
+OPEN_TURN_MAX = 45 * 60  # 초. 턴이 안 끝났으면 기록이 조용해도 이만큼은 일하는 중. 끝난 턴은 바로 쉼
 TAIL = 900_000
 
 TOOL_PHRASE = [
@@ -194,7 +194,8 @@ def build(cat, sessions):
             if tool and said:
                 break
     age = (now - last) / 1000
-    running = age < RUNNING_WITHIN or bool(turn_open and age < OPEN_TURN_MAX)
+    # 턴을 알면 턴만 본다 (막 끝난 턴은 기록이 새것이어도 쉼). 모르면 (기록 없음 등) 최근에 움직였는지로
+    running = age < RUNNING_WITHIN if turn_open is None else turn_open and age < OPEN_TURN_MAX
     out = {"state": "working" if running else "idle", "title": s.get("title") or "",
            "folder": os.path.basename((s.get("cwd") or "").rstrip("/")),
            "doing": describe(tool, tinp) if tool else "", "step": first_sentence(said), "last": last, "now": now}

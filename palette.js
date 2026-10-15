@@ -12,7 +12,10 @@ window.CAT_BASE = {
   A: "#ffffff", a: "#9ca3af",                           // 종이와 글줄
   F: "#e0262b",                                         // 안경테
   U: "#374151",                                         // 헤드폰
-  y: "#fde68a", p: "#fbcfe8"                            // 포스트잇
+  y: "#fde68a", p: "#fbcfe8",                           // 포스트잇
+  "!": "#ff3b30",                                       // 놀람 느낌표
+  "?": "#ffcc33",                                       // 노란 느낌표: 사용자 차례
+  h: "#ffffff"                                          // 느낌표 반짝임. 품종이 덮어쓰지 않는 칸
 };
 
 window.CAT_VARIANTS = {

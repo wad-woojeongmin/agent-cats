@@ -60,7 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stages = Stages(store: store, settings: settings)
         feed = StatusFeed(teamURL: Paths.team, stages: stages)
         watcher = WorldWatcher(hub: stages, settings: settings)
-        stages.onStageReady = { [weak self] stage in self?.watcher.sendAll(stage); self?.feed.refresh() }   // 새 화면도 바로 세상 정보와 상태를 받는다
+        stages.onStageReady = { [weak self] stage in self?.watcher.sendAll(stage); self?.feed.ready(stage) }   // 새 화면도 바로 세상 정보와 상태를 받는다
+        stages.onAck = { [weak self] key in self?.feed.ack(key) }
         statusMenu = StatusMenu(store: store, settings: settings, feed: feed, stages: stages)
         stages.onOpenTeam = { [weak self] in self?.statusMenu.open(.team) }
         store.onSaved = { [weak self] in self?.feed.refresh() }               // 팀.json 을 고치면 바로 다시 수집해 반영

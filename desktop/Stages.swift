@@ -45,6 +45,7 @@ final class Stages: ObservableObject {
     private(set) var stages: [Stage] = []
     var onOpenTeam: (() -> Void)?
     var onStageReady: ((Stage) -> Void)?
+    var onAck: ((String) -> Void)?                              // 고양이를 클릭해 "!" 를 확인했을 때
     private(set) lazy var menu = ContextMenu(stages: self)      // 고양이 우클릭 메뉴
     private var bag = Set<AnyCancellable>()
 
@@ -116,6 +117,7 @@ final class Stages: ObservableObject {
         let saved = settings.savedCats
         let s = saved.filter { keys.contains($0.key) }
         if s.count != saved.count { settings.savedCats = s }
+        if let a = settings.acks, a.contains(where: { !keys.contains($0.key) }) { settings.acks = a.filter { keys.contains($0.key) } }
     }
 
     /// 사용자가 고른 디스플레이. nil 이면 지금 고양이가 가장 적은 디스플레이로 옮긴다

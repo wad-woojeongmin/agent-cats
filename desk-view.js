@@ -2,14 +2,18 @@
    앱(Swift)과는 window.webkit.messageHandlers.cat 으로 말을 주고받는다 (desk.* 함수가 받는 쪽). */
 (function () {
   const W = window.deskWorld, B = window.deskBrain, S = window.deskSettings, G = window.CAT_GRID;
-  const layer = document.getElementById("pets");
+  const layer = document.getElementById("pets");      // 고양이 몸
+  const over = document.getElementById("overlay");    // 말풍선, 노란 "!" (어느 고양이보다 위)
   const staleEl = document.getElementById("stale");
-  const MOVE_POSES = { walk: 1, run: 1, jump: 1, stretch: 1, rest: 1, play: 1 };
+  const MOVE_POSES = { walk: 1, run: 1, jump: 1, stretch: 1, rest: 1, play: 1, alert: 1 };
   let signature = "", lastRects = "", rectsAt = 0, savedAt = Date.now(), data = null, home = "";
   const greets = {};   // key → {text, until}: 앱이 보낸 인사. 그 고양이가 이 화면에 있거나 생기면 한 번 띄운다
+  let attention = {};  // key → "reply" | "question": 사용자 차례라 머리 위에 노란 "!" (클릭하면 확인)
 
   const post = (msg) => { if (W.native) window.webkit.messageHandlers.cat.postMessage(msg); };
   const cell = () => S.size / G.w;
+  const actLabel = (s) => s.type === "stay" ? "stay:" + s.pose + (s.love ? "+love" : "")
+    : s.type === "move" ? "move:" + s.gait : s.type === "jump" ? "jump" + (s.perch ? "->" + s.perch.kind : "") : s.type;
   const saved = () => S.saved || (window.DESKTOP_SAVED && window.DESKTOP_SAVED.cats) || {};
 
   /* 이 디스플레이에 사는 고양이인지. 앱이 S.screen(이 화면)과 S.assign(고양이 → 화면)을 준다.
@@ -19,7 +23,7 @@
   /* ---------- 고양이 만들기 ---------- */
   function build(config) {
     const keep = {};
-    B.cats.forEach((c) => { keep[c.key] = c; c.el.remove(); c.short.remove(); c.detail.remove(); });
+    B.cats.forEach((c) => { keep[c.key] = c; c.el.remove(); c.short.remove(); c.detail.remove(); c.bang.remove(); });
     B.cats = config.cats.filter((cfg) => !cfg.hidden && mine(cfg)).map((cfg, i) => {
       const old = keep[cfg.key];
       const c = old ? Object.assign(old, { cfg }) : B.make(cfg, saved()[cfg.key]);
@@ -28,6 +32,9 @@
       c.el.innerHTML = '<div class="art"></div><span class="zzz" aria-hidden="true"><i>z</i><i>z</i><i>Z</i></span><span class="hearts" aria-hidden="true"><i>♥</i><i>♥</i></span>';
       c.art = c.el.querySelector(".art");
       c.short = bubble("short"); c.detail = bubble("detail");
+      c.bang = document.createElement("div");                            // 클릭은 통과 (hit rect 에도 안 넣는다)
+      c.bang.className = "bang"; c.bang.hidden = true; c.bang.innerHTML = window.bangSVG("?");
+      over.appendChild(c.bang);
       c.drawKey = ""; c.bbox = [0, 0, G.w, G.h];
       c.nextBubble = Date.now() + 4000 + i * 2500;
       layer.appendChild(c.el);
@@ -43,7 +50,7 @@
     el.className = "bubble " + kind;
     el.innerHTML = kind === "short" ? '<b class="b-main"></b>' : '<b class="b-main"></b><span class="b-sub"></span><small class="b-meta"></small>';
     el.hidden = true;
-    layer.appendChild(el);
+    over.appendChild(el);
     return el;
   }
 
@@ -59,7 +66,7 @@
       const line = window.catLine(c.cfg, (data.status || {})[c.key]);
       B.setLine(c, line);
       lines[c.key] = { short: line.short, state: line.state };
-      if (!c.detail.hidden) fillDetail(c);
+      fillDetail(c);   // 떠 있든 아니든 늘 최신으로
     });
     post({ type: "lines", items: lines });
     sayGreets(Date.now());
@@ -70,7 +77,7 @@
       const g = greets[c.key];
       if (!g) return;
       delete greets[c.key];
-      c.detail.hidden = true;
+      c.detailUntil = 0; c.detail.hidden = true;
       showShort(c, now, g.text);
       c.nextBubble = Math.max(c.nextBubble, now + 4000);
     });
@@ -86,16 +93,17 @@
     c.detail.querySelector(".b-sub").textContent = line.sub;
     c.detail.querySelector(".b-meta").textContent = line.meta;
   }
+  const working = (c) => c.line && c.line.state === "working";
+  const detailOn = (c, now) => working(c) || now < (c.detailUntil || 0);   // 일하는 동안은 늘, 아니면 클릭 후 8초
   function showShort(c, now, text) {
-    if (!c.detail.hidden) return;
+    if (!text && detailOn(c, now)) return;   // 인사는 자세한 말풍선을 잠깐 가린다
     c.short.querySelector(".b-main").textContent = text || c.line.short + (c.line.state === "working" ? " .." : "");
     c.short.hidden = false; c.shortUntil = now + 4000;
   }
-  function showDetail(c) {
-    if (!data) return;
-    fillDetail(c);
-    c.short.hidden = true;
-    c.detail.hidden = false; c.detailUntil = Date.now() + 8000;
+  function showDetail(c) {   // 일하는 고양이는 이미 떠 있으니 그대로
+    if (!data || working(c)) return;
+    fillDetail(c); c.short.hidden = true;
+    c.detailUntil = Date.now() + 8000;
   }
 
   /* placed: 이번 프레임에 먼저 놓인 말풍선들. 겹치면 위로 비켜 선다 */
@@ -117,6 +125,19 @@
     el.style.setProperty("--tail", Math.round(Math.min(Math.max(cx - left, 16), bw - 16)) + "px");
   }
 
+  /* 노란 "!": 그림 경계의 위 오른쪽. 놀란 "!" 가 떠 있거나 들고 있으면 숨긴다. 말풍선이 비켜 서도록 경계를 넓혀 돌려준다 */
+  function placeBang(c) {
+    const el = c.bang, k = cell();
+    el.hidden = !attention[c.key] || c.pose === "alert" || c.held;
+    if (el.hidden) return c.box;
+    const w = window.BANG_GRID.w * k, h = window.BANG_GRID.h * k;
+    const left = Math.min(Math.max(c.box[2] - w - k, 0), W.w - w);
+    const top = Math.min(Math.max(c.box[1] - h, 0), W.h - h);
+    el.style.width = w + "px";
+    el.style.transform = "translate(" + Math.round(left) + "px," + Math.round(top) + "px)";
+    return [c.box[0], Math.min(c.box[1], top), c.box[2], c.box[3]];
+  }
+
   /* ---------- 그리기 ---------- */
   function flipOf(c) { return (MOVE_POSES[c.pose] && c.dir < 0) || (c.pose === "sleep" && c.dir > 0); }
 
@@ -129,7 +150,7 @@
       const [x0, y0, x1, y1] = window.catFrame(c.cfg, st).bbox;         // 실제 그림이 있는 칸의 경계
       c.bbox = flipOf(c) ? [2 * G.footX - x1, y0, 2 * G.footX - x0, y1] : [x0, y0, x1, y1];
     }
-    const k = cell(), left = c.x - G.footX * k, top = c.y - G.footY * k;
+    const k = cell(), left = c.x - G.footX * k, top = c.y - G.footY * k - (c.lift || 0);   // lift: 놀라서 제자리 점프
     c.el.style.width = S.size + "px";
     c.el.style.transform = "translate(" + Math.round(left) + "px," + Math.round(top) + "px)";
     c.art.style.transform = flipOf(c) ? "scaleX(-1)" : "";
@@ -162,7 +183,10 @@
     const { c, moved } = drag;
     drag = null;
     if (moved) { B.drop(c, c.x, c.y); post({ type: "drag", on: false }); save(); }
-    else if (click) showDetail(c);
+    else if (click) {
+      showDetail(c);
+      if (attention[c.key]) { delete attention[c.key]; post({ type: "ack", key: c.key }); }   // 일하는 중이어도 확인
+    }
   }
   window.addEventListener("pointerup", () => release(true));
   window.addEventListener("pointercancel", () => release(false));               // 놓친 pointerup 때문에
@@ -202,6 +226,7 @@
       const old = S.size;
       Object.assign(S, o, { behaviors: Object.assign({}, S.behaviors, o.behaviors || {}) });
       document.body.hidden = S.enabled === false;
+      B.onAction = S.debugLog ? (c, s) => post({ type: "action", key: c.key, act: actLabel(s) }) : null;   // 행동 기록 (defaults debugLog)
       if (S.size !== old) B.cats.forEach((c) => { c.drawKey = ""; });
       const a = S.assign || {}, h = JSON.stringify([S.screen, Object.keys(a).sort().map((k) => [k, a[k]])]);   // 사전 순서는 매번 다를 수 있다
       if ((o.assign || o.screen) && h !== home) { home = h; apply(); }   // 이 화면에 사는 고양이가 바뀌었을 때만 다시 만든다
@@ -211,6 +236,7 @@
     pin(key, v) { const c = B.cats.find((x) => x.key === key); if (c) { B.setPinned(c, v); save(); } },
     unpinAll() { B.cats.forEach((c) => B.setPinned(c, false)); save(); },
     status(o) { window.CATTEAM = o; apply(); },                         // 앱이 모은 상태 (10초마다)
+    attention(o) { attention = o || {}; },                              // 확인 안 한 사용자 차례 (바뀔 때만)
     greet(key, text) { greets[key] = { text, until: Date.now() + 30000 }; sayGreets(Date.now()); }   // 새로 온 고양이 인사
   };
 
@@ -226,9 +252,10 @@
         render(c);
         if (S.bubbleSec > 0 && now >= c.nextBubble) { showShort(c, now); c.nextBubble = now + S.bubbleSec * 1000; }
         if (!c.short.hidden && now > c.shortUntil) c.short.hidden = true;
-        if (!c.detail.hidden && now > c.detailUntil) c.detail.hidden = true;
-        if (c.held) { c.short.hidden = true; c.detail.hidden = true; }
-        placeBubble(c, c.detail, c.box, placed); placeBubble(c, c.short, c.box, placed);
+        c.detail.hidden = !detailOn(c, now) || c.held || !c.short.hidden;   // 들고 있거나 인사 중엔 숨겼다가 다시
+        if (c.held) c.short.hidden = true;
+        const box = placeBang(c);
+        placeBubble(c, c.detail, box, placed); placeBubble(c, c.short, box, placed);
       });
       sendRects(now);
       if (now - savedAt > 20000) save();

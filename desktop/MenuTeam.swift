@@ -9,6 +9,8 @@ struct TeamView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            PageHeader(title: "팀원 관리")
+            Divider()
             Text("고양이별 이름, 상태 메시지, 이미지, 표시 여부를 관리해요. 끌어서 순서를 바꿀 수 있어요.")
                 .font(.caption).foregroundStyle(.secondary)
                 .padding(.horizontal, 14)
@@ -27,7 +29,7 @@ struct TeamView: View {
             }
             .padding([.horizontal, .bottom], 14)
         }
-        .navigationTitle("팀원 관리")
+        .onExitCommand { router.pop() }
     }
 }
 
@@ -74,11 +76,23 @@ struct CatEditor: View {
     @EnvironmentObject var store: TeamStore
     @EnvironmentObject var stages: Stages
     @EnvironmentObject var settings: PetSettings
-    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var router: Router
     let key: String
     @State private var cat = CatEntry(raw: [:])
 
     var body: some View {
+        VStack(spacing: 0) {
+            PageHeader(title: cat.label.isEmpty ? "고양이 편집" : cat.label) {
+                Button("저장") { store.update(cat); router.pop() }
+            }
+            Divider()
+            form
+        }
+        .onExitCommand { router.pop() }
+        .onAppear { if let c = store.cats.first(where: { $0.key == key }) { cat = c } }
+    }
+
+    private var form: some View {
         Form {
             TextField("이름", text: $cat.name)
             TextField("직군", text: $cat.role)
@@ -108,10 +122,5 @@ struct CatEditor: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(cat.label.isEmpty ? "고양이 편집" : cat.label)
-        .toolbar {
-            Button("저장") { store.update(cat); dismiss() }
-        }
-        .onAppear { if let c = store.cats.first(where: { $0.key == key }) { cat = c } }
     }
 }

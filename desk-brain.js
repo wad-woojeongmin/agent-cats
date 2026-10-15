@@ -3,7 +3,9 @@
      move  {x, y, gait}            바닥이나 횃대 위를 걸어/달려서 간다
      jump  {x, y, perch}           포물선으로 뛰어 (횃대에) 내려앉는다
      stay  {pose, dur, face, love} 제자리에서 한 자세로 머문다
-     chase {until}                 커서를 쫓아가 톡톡 친다 */
+           {hop}                   놀라서 제자리 점프(alert). 높이는 c.lift(px)로만 주고 x, y 는 그대로
+           {meet}                  서로 놀기: 짝도 meet 단계에 오면 같이 다음(놀기)으로, dur 안에 안 오면 놀기를 건너뛴다
+     chase {dur}                   커서를 쫓아가 톡톡 친다 (커서를 흔들 때만). until 은 시작할 때 정한다 */
 (function () {
   const W = window.deskWorld, G = window.CAT_GRID;
   const S = window.deskSettings = {
@@ -13,11 +15,14 @@
   };
   const SPEED = { walk: 46, run: 170 };
   const TICK = { walk: 150, run: 90 };
+  const CHASE_FAR = 5;                                 // 커서가 고양이 너비의 이 배보다 CHASE_FAR_GRACE 넘게 멀어지면 쫓기를 그만둔다
+  const CHASE_FAR_GRACE = 500;                         // ms. 짧아야 한다: 고양이가 170px/s 로 다가가므로 1.5초면 문턱 안으로 들어와 버린다
   const rand = W.rand, pick = (a) => a[Math.floor(Math.random() * a.length)];
   const catW = () => S.size, catH = () => S.size * G.h / G.w;
   const on = (k) => S.behaviors[k] !== false;
   const slow = () => 1.6 - S.activity;                 // 활발할수록 한자리에 짧게 머문다
   const B = window.deskBrain = { cats: [], catH };               // catH: 고양이 그림 높이(px). tests/sim.js 가 쓴다
+  B.onAction = null;                                             // (c, step): 새 걸음을 시작할 때. desk-view.js 가 디버그 기록에 쓴다
 
   B.make = function (cfg, saved) {
     const [x, y] = saved ? W.clampFloor(saved.x, saved.y, catW(), catH()) : W.randomFloor(catW(), catH());
@@ -73,11 +78,6 @@
       if (c.perch) return null;
       return [{ type: "move", x, y, gait: "run" }, stay("sit", rand(2, 5))];
     } },
-    { w: 1, need: "chase", mobile: true, make(c, now) {
-      const m = W.mouse;
-      if (now - m.moved > 5000 || m.x < 0 || c.perch) return null;
-      return [{ type: "chase", until: now + rand(6, 10) * 1000 }, stay("sit", 3)];
-    } },
     { w: 1.2, need: "window", mobile: true, make(c) {                 // 창 위에 올라가기
       const segs = W.windowSegments(catH());
       if (!segs.length) return null;
@@ -110,23 +110,25 @@
       const t = travel(c, fx, fy);
       return t && t.concat(stay("play", rand(4, 7), { face: left ? 1 : -1 }), stay("sit", 3, { face: left ? 1 : -1 }));
     } },
-    { w: .8, need: "friends", mobile: true, make(c) {                 // 서로 놀기
-      const mates = B.cats.filter((o) => o !== c && free(o) && o.line.state === "idle");
+    { w: .8, need: "friends", mobile: true, make(c) {                 // 서로 놀기: 짝은 쉬는 중 또는 세션 없음 고양이
+      const mates = B.cats.filter((o) => o !== c && free(o) && (o.line.state === "idle" || o.line.state === "missing"));
       if (!mates.length) return null;
       const o = pick(mates);
       const gap = catW() * 0.42;
       const [mx, my] = W.clampFloor((c.x + o.x) / 2, (c.y + o.y) / 2, catW() + gap, catH());
       const mine = travel(c, mx - gap, my), theirs = travel(o, mx + gap, my);
       if (!mine || !theirs) return null;
-      const dur = rand(6, 9);
-      o.queue = theirs.concat(stay("play", dur, { face: -1, love: true }), stay("sit", 3, { face: -1 }));
+      const dur = rand(6, 9), pair = { cats: [c, o] };                // 둘 다 도착해야 같이 논다
+      const after = (face) => [stay("sit", 15, { face, meet: pair }), stay("play", dur, { face, love: true }), stay("sit", 3, { face })];
+      o.queue = theirs.concat(after(-1));
       o.cur = null;
-      return mine.concat(stay("play", dur, { face: 1, love: true }), stay("sit", 3, { face: 1 }));
+      return mine.concat(after(1));
     } }
   ];
+  B.chaseFar = CHASE_FAR;                                             // tests/sim.js 가 쓴다
   B.idle = IDLE;                                                      // tests/sim.js 가 '서로 놀기'를 바로 불러 본다
   const free = (o) => !o.pinned && !o.held && !o.perch && (!o.cur || o.cur.type === "stay") &&
-                      ![o.cur].concat(o.queue).some((s) => s && s.love);   // 이미 다른 친구와 노는 중이면 빼 둔다
+                      ![o.cur].concat(o.queue).some((s) => s && (s.love || s.meet));   // 이미 다른 친구와 노는(기다리는) 중이면 빼 둔다
 
   function choose(c, now) {
     const st = c.line.state;
@@ -156,10 +158,13 @@
     step.t0 = now;
     if (step.type === "jump") { step.x0 = c.x; step.y0 = c.y; step.dur = 450 + Math.min(500, Math.hypot(step.x - c.x, step.y - c.y)); c.perch = null; }
     if (step.type === "stay" && step.face) c.dir = step.face;
+    if (step.type === "chase") step.until = now + step.dur;
     c.cur = step;
+    B.onAction?.(c, step);
   }
 
   function advance(c, dt, now) {
+    c.lift = 0;
     if (c.held) { c.pose = "jump"; c.frame = 1; return; }
     const s = c.cur;
     c.love = false;
@@ -167,7 +172,10 @@
       let tx = s.x, ty = s.y, g = s.gait;
       if (s.type === "chase") {
         tx = W.mouse.x; ty = W.clampFloor(W.mouse.x, W.mouse.y + catH() * 0.3, catW(), catH())[1]; g = "run";
-        if (now > s.until || now - W.mouse.moved > 6000) return finish(c, now);
+        if (now > s.until || now - W.mouse.moved > 3000) return finish(c, now);   // 다른 화면으로 가면 위치가 안 오므로 멈춘 것과 같다
+        if (Math.hypot(W.mouse.x - c.x, W.mouse.y - (c.y - catH() / 2)) <= catW() * CHASE_FAR) s.far = 0;   // 너무 멀리 가 있으면 흥미를 잃는다
+        else if (!s.far) s.far = now;
+        else if (now - s.far > CHASE_FAR_GRACE) return finish(c, now);
       }
       if (c.perch) ty = c.y;
       const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy), v = SPEED[g] * dt;
@@ -198,8 +206,21 @@
         finish(c, now);
       }
     } else {
+      const m = s.meet;
+      if (m && m.cats.every((o) => B.cats.includes(o) && o.cur && o.cur.meet === m)) {   // 둘 다 왔다: 같은 순간 함께 놀기 시작
+        m.cats.forEach((o) => finish(o, now));
+        return advance(c, dt, now);
+      }
       c.pose = s.pose; c.frame = 0; c.love = !!s.love;
-      if (now - s.t0 > s.dur) finish(c, now);
+      if (s.hop) {                                                    // 웅크림 -> 공중 -> 착지 웅크림 -> 섬
+        const u = (now - s.t0) / s.dur, p = (u - .15) / .45;
+        c.frame = u < .15 || (u >= .6 && u < .72) ? 0 : u < .6 ? 1 : 2;
+        if (c.frame === 1) c.lift = catH() * .4 * 4 * p * (1 - p);
+      }
+      if (now - s.t0 > s.dur) {
+        if (m) c.queue = c.queue.filter((x) => !x.love);              // 짝이 끝내 안 왔다: 혼자 놀지 않는다
+        finish(c, now);
+      }
     }
   }
   function finish(c, now) { c.cur = null; const next = c.queue.shift(); if (next) begin(c, next, now); }
@@ -225,8 +246,26 @@
     return true;
   }
 
+  /* 고양이 가까이서 커서를 흔들면 가장 가까운 쉬는 고양이가 하던 일을 접고 쫓아온다 */
+  function wiggled(now) {
+    const m = W.mouse;
+    if (!on("chase") || m.hist.length < 4 || !W.wiggle(now)) return;
+    let near = null, best = catW() * 1.5;
+    B.cats.forEach((c) => {
+      const st = c.line.state, s = c.cur;
+      if ((st !== "idle" && st !== "missing") || c.pinned || c.held || c.perch || (s && (s.type === "jump" || s.type === "chase" || s.hop))) return;
+      const d = Math.hypot(m.x - c.x, m.y - (c.y - catH() / 2));      // 몸 가운데까지
+      if (d <= best) { near = c; best = d; }
+    });
+    if (!near) return;
+    m.hist = [];                                                      // 다음은 새로 흔들어야 한다
+    near.queue = [{ type: "chase", dur: 30000 }, stay("sit", 3)];       // 1초 놀라고 나서 쫓는다. 30초는 쫓기 시작부터
+    begin(near, stay("alert", 1, { face: m.x >= near.x ? 1 : -1, hop: true }), now);
+  }
+
   /* 큐가 비면 새 계획을 세운다 */
   B.step = function (dt, now) {
+    wiggled(now);
     B.cats.forEach((c) => {
       if (!c.cur && !c.held) {
         if (!c.queue.length) c.queue = choose(c, now);
